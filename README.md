@@ -1,31 +1,27 @@
-# Meme Run
+# MEME RUN
 
-An endless, auto-running brainrot shooter. You run forever to the right, jump over obstacles, collect aura, and shoot sentient memes before they steal your brain cells.
+An endless auto-runner brainrot shooter. The algorithm is chasing you: outrun it, shoot the memes, steal the aura back.
 
 ## Play
 
-- **Desktop:** `Space` / `↑` to jump, hold `F` to shoot.
-- **Phone:** tap the game area to jump; hold the **SHOOT** button; use **JUMP** to jump.
-- **Restart:** `Space` / `Enter` on the game-over screen.
+**Live:** https://makefunstuff.github.io/meme-run/
+
+- **Desktop:** `SPACE` / `↑` / `W` to jump, hold `F` (or `J`) to shoot.
+- **Phone:** tap the left half of the screen to jump, hold the right half (or the **SHOOT** button) to fire. Big JUMP / SHOOT buttons appear on touch devices.
 
 ## What is in it
 
-- Endless auto-run with procedurally spawned memes, obstacles and aura coins.
-- Auto-aiming blaster and a recoil animation.
-- Meme enemies labelled `NPC`, `SUS`, `OHIO`, `RIZZ`, `SKIBIDI`, `BRAINROT`, `TOUCH GRASS`, `FANUM TAX`, `MEWING`, `GYATT`, `NO CAP`, `CHEEMS`, `SIGMA`, `RATIO`, `THIS IS FINE`, `RICKROLL`, `DOGE`.
-- Obstacles labelled `RATIO`, `NFT`, `SCAM`, `TAX`, `DEADLINE`, `CAPITALISM`, `SUS`.
-- Toast jokes on kills and hits, plus a score based on distance, kills and aura.
-- Cute pastel sky, sentient clouds, eyeballs, sunglasses sun and floating memes.
+- Hand-drawn canvas art, no assets: sticker-outlined characters, gradient skies, layered parallax world (hills, monuments, clouds with faces, eyeballs with lashes, god rays, buried crystals).
+- 14 distinct meme enemies (SUS crewmates, NPC, SKIBIDI toilet, DOGE, BRAINROT, RIZZ crown, OHIO portal, TOUCH GRASS, RATIO, FANUM TAX, RICKROLL, MEWING) with auto-aim gunfire.
+- Obstacles: spike crates, buzzsaws, traffic cones, 404 monitors, NFT frames.
+- Aura coins, rizz gems and brain pickups; combo multiplier with screen shake, hit-stop, particles and floating text.
+- Procedural spawn patterns (rows, arcs, stacks, forts, saw gauntlets, choir) with a difficulty ramp.
+- Procedural audio (WebAudio) for shots, jumps, kills, pickups and death.
 
 ## Run locally
 
 ```bash
-python3 -m http.server 8767
-# open http://127.0.0.1:8767/
+python3 -m http.server 8767   # then open http://127.0.0.1:8767/
 ```
 
-## Deploy
-
-GitHub Pages, from `main`, root path:
-
-https://makefunstuff.github.io/meme-run/
+Single file, no build step.
