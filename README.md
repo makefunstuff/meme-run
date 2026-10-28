@@ -1,22 +1,31 @@
 # MEME RUN
 
-An endless auto-runner brainrot shooter. The algorithm is chasing you: outrun it, shoot the memes, steal the aura back.
-
-## Play
+An endless auto-runner brainrot shooter with modes, weapons, random reality events and a boss.
 
 **Live:** https://makefunstuff.github.io/meme-run/
 
-- **Desktop:** `SPACE` / `↑` / `W` to jump, hold `F` (or `J`) to shoot.
-- **Phone:** tap the left half of the screen to jump, hold the right half (or the **SHOOT** button) to fire. Big JUMP / SHOOT buttons appear on touch devices.
+## Controls
 
-## What is in it
+- **Desktop:** `SPACE` / `↑` / `W` jump, hold `F` (or `J`) to shoot.
+- **Phone:** tap the left half to jump, hold the right half (or **SHOOT**) to fire.
 
-- Hand-drawn canvas art, no assets: sticker-outlined characters, gradient skies, layered parallax world (hills, monuments, clouds with faces, eyeballs with lashes, god rays, buried crystals).
-- 14 distinct meme enemies (SUS crewmates, NPC, SKIBIDI toilet, DOGE, BRAINROT, RIZZ crown, OHIO portal, TOUCH GRASS, RATIO, FANUM TAX, RICKROLL, MEWING) with auto-aim gunfire.
+## Modes
+
+| mode | what it does |
+|---|---|
+| **CLASSIC** | the standard doomscroll |
+| **CHAOS** | 1.75× spawn density, faster, events every ~9s |
+| **OHIO** | neon night palette, heavy gravity, events every ~6s |
+| **ZEN** | no damage, no score recorded — just vibes |
+
+## Content
+
+- **19 meme enemies**, each hand-drawn with its own silhouette: SUS crewmates, NPC, Skibidi toilet, DOGE, BRAINROT, RIZZ crown, OHIO portal, TOUCH GRASS, RATIO, FANUM TAX, RICKROLL, MEWING, GYATT megaphone, THIS IS FINE, BIRDACCINO, GIGACHAD and the ranged **SPAM BOT** that fires notifications at you.
+- **5 weapons**: BLASTER (infinite), BREAD (4-slice spread), PRISM (piercing laser), VOID (orbs that collapse into black holes which suck in memes) and SUS (homing crewmates). Weapon crates drop from `patCrate` spawns.
+- **8 random events** with a banner announcement: MOON GRAVITY, HEAVY DAY, GRAVITY FLIP (stand on the ceiling), MEME RAIN, BULLET TIME, FANUM FRENZY, TOUCH GRASS, OHIO LEAK (RGB glitch).
+- **Boss: THE ALGORITHM** — a crowned phone with a giant eye, orbiting notification badges and a loading bar. It fires downvotes and spawns minion drops every ~1150 m. Kill it for +400 aura and a screen clear.
 - Obstacles: spike crates, buzzsaws, traffic cones, 404 monitors, NFT frames.
-- Aura coins, rizz gems and brain pickups; combo multiplier with screen shake, hit-stop, particles and floating text.
-- Procedural spawn patterns (rows, arcs, stacks, forts, saw gauntlets, choir) with a difficulty ramp.
-- Procedural audio (WebAudio) for shots, jumps, kills, pickups and death.
+- Combo multiplier, aura/rizz/brain pickups, screen shake, hit-stop, slow-mo death, procedural WebAudio SFX, local best score.
 
 ## Run locally
 
