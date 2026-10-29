@@ -90,7 +90,7 @@ func _ready() -> void:
 	if not OS.has_feature("web"):
 		win.size = Vector2i(1280, 720)
 	view = get_viewport().get_visible_rect().size
-	ground_y = view.y * 0.78
+	ground_y = view.y * 0.82
 
 	backdrop = CanvasLayer.new()
 	backdrop.name = "Backdrop"
@@ -577,6 +577,10 @@ func _handle_cli() -> void:
 			_capture_run(a.substr(6), 6)
 		elif a.begins_with("--mode="):
 			start_run(a.substr(7))
+		elif a == "--boss":
+			if state != ST_PLAY:
+				start_run(mode)
+			_spawn_boss()
 		elif a.begins_with("--spawn="):
 			_spawn_lineup(a.substr(8))
 

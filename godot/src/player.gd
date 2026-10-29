@@ -299,6 +299,7 @@ func _draw() -> void:
 	if hit_flash > 0.02:
 		body_col = body_col.lerp(Color.WHITE, hit_flash * 0.7)
 
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
 	# dash smear
 	for i in trail.size():
 		var t2 := float(i) / float(max(1, trail.size()))
@@ -311,6 +312,10 @@ func _draw() -> void:
 
 	var a := 1.0 if not flicker else 0.45
 	var facing := 1.0 if aim.x >= 0.0 else -1.0
+
+	# drawn at 1.3x: the collision radius stays honest, so this is purely a
+	# reading-size decision — the character was under 8% of screen height
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.3, 1.3))
 
 	# contact shadow: without it the character floats above the floor
 	var air := clampf(1.0 - (ground_y_offset()) / 260.0, 0.35, 1.0)
@@ -367,6 +372,8 @@ func _draw() -> void:
 	draw_line(shoulder, arm_end, Color(Toy.PINK_D, a), 8.0, true)
 	draw_circle(arm_end, 4.6, Color(Toy.SKIN, a), true, -1.0, true)
 	_draw_gun(arm_end, a)
+
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
 
 	# muzzle flash
 	if muzzle > 0.02:

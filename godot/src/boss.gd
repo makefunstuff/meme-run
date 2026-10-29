@@ -199,10 +199,10 @@ func _draw() -> void:
 		Toy.blob(self, bp, 9.0 * scale_mult, col, 1.8, 12)
 		draw_circle(bp, 3.4 * scale_mult, Toy.WHITE, true, -1.0, true)
 
-	# health bar above, phase pips
-	var bw := w * 1.5
-	var frac := clampf(float(hp) / float(max_hp), 0.0, 1.0)
-	var by := -h * 1.05
-	draw_rect(Rect2(-bw * 0.5, by, bw, 8), Color(0.08, 0.04, 0.12, 0.8))
-	draw_rect(Rect2(-bw * 0.5, by, bw * frac, 8), Toy.PINK if phase == 3 else (Toy.GOLD if phase == 2 else Toy.MINT))
-	draw_rect(Rect2(-bw * 0.5, by, bw, 8), Toy.INK, false, 1.6)
+	# the health bar lives in the HUD, not twice on screen; just mark the phase
+	var pip_y := -h * 1.0
+	for i in 3:
+		var lit := i < phase
+		var c: Color = [Toy.MINT, Toy.GOLD, Toy.PINK][i] if lit else Color(0.25, 0.2, 0.3)
+		draw_circle(Vector2((float(i) - 1.0) * 14.0, pip_y), 4.5, c, true, -1.0, true)
+		draw_circle(Vector2((float(i) - 1.0) * 14.0, pip_y), 4.5, Toy.INK, false, 1.4, true)

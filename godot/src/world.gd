@@ -75,7 +75,7 @@ func _ridge(x: float, period: float, amp: float, phase: float) -> float:
 func _process(delta: float) -> void:
 	t += delta
 	view = get_viewport().get_visible_rect().size
-	ground_y = view.y * 0.78
+	ground_y = view.y * 0.82
 	queue_redraw()
 
 func _draw() -> void:

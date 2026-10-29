@@ -166,7 +166,7 @@ func _draw() -> void:
 	# ground shadow
 	draw_circle(Vector2(0, r * 0.92), r * 0.9, Color(0.1, 0.05, 0.12, 0.28), true, -1.0, true)
 
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(2.0 - pop, pop))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2((2.0 - pop) * 1.22, pop * 1.22))
 
 	match kind:
 		"walker":
