@@ -52,6 +52,9 @@ func setup(g: Node, k: String, pos: Vector2, scale_mul: float = 1.0) -> void:
 	phase = randf() * TAU
 	shoot_cd = randf_range(0.7, 1.8)
 	blink_cd = randf_range(0.8, 3.0)
+	# not every spawn barks: a wall of text on the right edge helps nobody
+	if randf() < 0.45:
+		game.say_event(kind + "_spawn", self, {"duration": 1.5, "cooldown": 99.0})
 
 func _physics_process(delta: float) -> void:
 	if dead:
@@ -138,6 +141,8 @@ func apply_hit(dmg: int, dir: Vector2) -> bool:
 	hp -= dmg
 	hit_flash = 1.0
 	knock = dir.normalized() * 220.0
+	if randf() < 0.18:
+		game.say_event("hit", self, {"duration": 1.1})
 	if hp <= 0:
 		_die()
 		return true
@@ -147,6 +152,7 @@ func _die() -> void:
 	dead = true
 	if game != null:
 		game.emit_fx("enemy_death", global_position, {"kind": kind, "colour": data["body"]})
+		game.say_death_at(global_position)
 		game.on_enemy_killed(self, int(data["coins"]))
 	# splitters break into two small walkers
 	if kind == "splitter" and scale_factor > 0.7:

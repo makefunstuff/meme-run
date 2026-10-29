@@ -200,6 +200,8 @@ func _start_dash() -> void:
 	trail.clear()
 	if game != null:
 		game.emit_fx("dash", global_position)
+		if randf() < 0.5:
+			game.say_event("player_dash", self, {"duration": 1.0, "cooldown": 3.0})
 
 # ------------------------------------------------------------------ shoot ---
 
@@ -250,6 +252,7 @@ func hurt(from: Vector2) -> bool:
 	game.shake(14.0)
 	game.hitstop(0.09)
 	game.emit_fx("hurt", global_position)
+	game.say_event("player_damage", self, {"duration": 1.3, "cooldown": 2.5})
 	if health <= 0:
 		_die()
 		return true

@@ -237,7 +237,14 @@ static func heart(ci: CanvasItem, centre: Vector2, s: float, fill: Color) -> voi
 static func text(ci: CanvasItem, pos: Vector2, s: String, size: int, colour: Color,
 		align: int = HORIZONTAL_ALIGNMENT_LEFT, outline: int = 0,
 		outline_colour: Color = INK) -> void:
+	# draw_string only honours alignment when it is given a width; with width -1
+	# it always draws left-aligned from pos. Doing the offset here means every
+	# centred and right-aligned string in the game is actually centred.
 	var font: Font = ThemeDB.fallback_font
+	var p := pos
+	if align != HORIZONTAL_ALIGNMENT_LEFT:
+		var w := font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		p.x -= w if align == HORIZONTAL_ALIGNMENT_RIGHT else w * 0.5
 	if outline > 0:
-		ci.draw_string_outline(font, pos, s, align, -1, size, outline, outline_colour)
-	ci.draw_string(font, pos, s, align, -1, size, colour)
+		ci.draw_string_outline(font, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, outline, outline_colour)
+	ci.draw_string(font, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, colour)

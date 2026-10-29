@@ -68,6 +68,9 @@ func _physics_process(delta: float) -> void:
 			# tell: the eye narrows, then a spread of shots
 			eye_open = lerp(eye_open, 0.15, delta * 8.0)
 			if state_t > 0.55:
+				if game != null:
+					game.say_event("boss_eye", self, {"duration": 1.4, "cooldown": 3.0,
+						"colour": Color("#f6dcff"), "ink": Color("#3a1f4a"), "offset": -118.0})
 				_fire_volley()
 				state = "idle"
 				state_t = 0.0
@@ -75,6 +78,9 @@ func _physics_process(delta: float) -> void:
 		"summon":
 			eye_open = lerp(eye_open, 0.6, delta * 4.0)
 			if state_t > 0.7:
+				if game != null:
+					game.say_event("boss_summon", self, {"duration": 1.4, "cooldown": 3.0,
+						"colour": Color("#f6dcff"), "ink": Color("#3a1f4a"), "offset": -118.0})
 				_summon()
 				state = "idle"
 				state_t = 0.0
@@ -83,6 +89,9 @@ func _physics_process(delta: float) -> void:
 			if state_t < 0.6:
 				position.y = lerp(position.y, anchor.y - 70.0, delta * 3.0)
 			elif state_t < 1.1:
+				if game != null and state_t < 0.7:
+					game.say_event("boss_dive", self, {"duration": 1.2, "cooldown": 3.0,
+						"colour": Color("#ffe0e6"), "ink": Color("#4a1220"), "offset": -118.0})
 				position.y += 900.0 * delta
 			elif state_t < 1.3:
 				if game != null:

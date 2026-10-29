@@ -15,6 +15,7 @@ const PickupScript = preload("res://src/pickup.gd")
 const BossScript = preload("res://src/boss.gd")
 const HudScript = preload("res://src/hud.gd")
 const FxScript = preload("res://src/fx.gd")
+const SpeechScript = preload("res://src/speech.gd")
 const Toy = preload("res://src/toy.gd")
 
 const BOSS_EVERY := 1100.0
@@ -35,6 +36,7 @@ var entities: Node2D
 var player: Node2D
 var camera: Camera2D
 var fx: Node2D
+var speech: Node2D
 var hud: Control
 
 var enemies: Array = []
@@ -64,6 +66,7 @@ var time_scale_target := 1.0
 var shake_amt := 0.0
 var hitstop_until := 0
 var autoplay := false
+var _death_shot := false
 
 const DEATH_LINES := [
 	"Your brainrot has been fully monetized.",
@@ -113,6 +116,10 @@ func _ready() -> void:
 	fx = FxScript.new()
 	fx.name = "Fx"
 	add_child(fx)
+
+	speech = SpeechScript.new()
+	speech.name = "Speech"
+	add_child(speech)
 
 	var layer := CanvasLayer.new()
 	layer.layer = 10
@@ -179,6 +186,7 @@ func start_run(m: String) -> void:
 	kills = 0
 	combo = 0
 	best_combo = 0
+	_last_combo_bark = 0
 	boss_kills = 0
 	next_boss = BOSS_EVERY
 	spawn_t = 1.2
@@ -234,7 +242,11 @@ func _on_player_died() -> void:
 		best = int(pnl)
 		_save_best()
 	hud.state = "over"
+	hud.banner_t = 0.0          # the run banner should not sit behind the results
+	hud.toast_t = 0.0
 	shake(16.0)
+	if speech != null:
+		speech.emit_at(player.global_position, BARKS["player_death"][randi() % BARKS["player_death"].size()])
 
 # ------------------------------------------------------------- spawn loop ---
 
@@ -385,6 +397,9 @@ func on_enemy_killed(e: Node2D, coins: int) -> void:
 	fx.text(e.global_position + Vector2(0, -30), "+$" + str(int(14 * mult)), Toy.GOLD, 16)
 	if combo > 0 and combo % 5 == 0:
 		shake(4.0)
+		if combo > _last_combo_bark:
+			_last_combo_bark = combo
+			say_event("player_combo", player, {"duration": 1.4, "cooldown": 0.1})
 		fx.text(e.global_position + Vector2(0, -54), "x%d" % combo, Toy.MINT, 20)
 
 func on_boss_killed(_b: Node2D) -> void:
@@ -421,6 +436,7 @@ func on_pickup(p: Node2D) -> void:
 			player.ammo = int(player.WEAPONS[p.weapon]["ammo"])
 			emit_fx("crate", p.global_position)
 			hud.show_toast(weapon_label() + " ONLINE")
+			say_event("player_weapon", player, {"duration": 1.4, "cooldown": 1.0})
 
 func on_bullet_gone(b: Node2D) -> void:
 	bullets.erase(b)
@@ -457,6 +473,46 @@ func weapon_label() -> String:
 	if player.ammo > 0:
 		label += " " + str(player.ammo)
 	return label
+
+# ------------------------------------------------------------------ voice ---
+
+## The cast talks. Barks are short, in character, and rationed — a screen full of
+## speech bubbles is noise, so the speech node caps and cools them down.
+const BARKS := {
+	"walker_spawn": ["hey. hey.", "you look liquid.", "gm.", "touch grass?", "gm ser"],
+	"flyer_spawn": ["i can see ur house", "up here, idiot", "ratio incoming", "look up"],
+	"charger_spawn": ["BEEP", "brace", "i am the news", "coming through"],
+	"shooter_spawn": ["hold still", "pew pew", "cover me", "i have a lens"],
+	"brute_spawn": ["heavy day", "i lift", "no thoughts", "big bag"],
+	"splitter_spawn": ["two for one", "we contain multitudes", "cut me", "i split"],
+	"drifter_spawn": ["just drifting", "no signal", "wheee", "unmuted"],
+	"hit": ["ow", "rude", "skill issue", "that was unpatched", "not the face", "bruh"],
+	"death": ["gg", "i'm telling", "rekt", "ngmi", "this is fine", "tell my bag"],
+	"boss_eye": ["personalised.", "for you.", "watch this.", "you are the content."],
+	"boss_summon": ["more of you.", "engagement.", "go, my children."],
+	"boss_dive": ["down bad.", "incoming.", "buy the dip."],
+	"player_damage": ["ngmi", "ouch", "that was personal", "my aura", "rude"],
+	"player_dash": ["bye", "not today", "later"],
+	"player_weapon": ["new meta", "i can work with this", "gm", "up only"],
+	"player_combo": ["i am the algorithm", "printing", "send it", "we are so back"],
+	"player_death": ["ngmi", "that was not financial advice"],
+}
+
+var _last_combo_bark := 0
+
+func say(who: Node2D, text: String, opts: Dictionary = {}) -> void:
+	if speech != null:
+		speech.say(who, text, opts)
+
+func say_event(kind: String, who: Node2D, opts: Dictionary = {}) -> void:
+	var pool: Array = BARKS.get(kind, [])
+	if pool.is_empty():
+		return
+	say(who, pool[randi() % pool.size()], opts)
+
+func say_death_at(pos: Vector2) -> void:
+	if speech != null:
+		speech.emit_at(pos, BARKS["death"][randi() % BARKS["death"].size()])
 
 # --------------------------------------------------------------------- feel ---
 
@@ -577,6 +633,8 @@ func _handle_cli() -> void:
 			_capture_run(a.substr(6), 6)
 		elif a.begins_with("--mode="):
 			start_run(a.substr(7))
+		elif a == "--die":
+			_death_shot = true
 		elif a == "--boss":
 			if state != ST_PLAY:
 				start_run(mode)
@@ -599,9 +657,17 @@ func _spawn_lineup(list: String) -> void:
 
 func _capture_run(dir_path: String, count: int) -> void:
 	autoplay = true
-	if state != ST_PLAY:
+	if state == ST_PLAY:
+		pass
+	elif OS.get_cmdline_user_args().has("--menu"):
+		pass            # photograph the title screen as-is
+	else:
 		start_run(mode)
 	await get_tree().create_timer(1.6).timeout
+	if _death_shot and player != null:
+		player.health = 1
+		player.hurt(player.global_position + Vector2(-10, 0))
+		await get_tree().create_timer(0.8).timeout
 	for i in count:
 		if count > 1:
 			await get_tree().create_timer(0.9).timeout
