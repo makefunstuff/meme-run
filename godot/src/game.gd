@@ -304,6 +304,8 @@ func _process(delta: float) -> void:
 		spawn_t = gap * randf_range(0.75, 1.25)
 		_spawn_wave()
 
+	_prune(delta)
+
 	pickup_t -= delta
 	if pickup_t <= 0.0:
 		pickup_t = randf_range(1.4, 2.4)
@@ -315,6 +317,20 @@ func _process(delta: float) -> void:
 	if player != null and not player.dead:
 		if player.global_position.y > view.y + 200.0:
 			player.hurt(player.global_position)
+
+var _prune_t := 0.0
+
+func _prune(delta: float) -> void:
+	_prune_t += delta
+	if _prune_t < 0.35:
+		return
+	_prune_t = 0.0
+	enemies = enemies.filter(func(e): return is_instance_valid(e) and not e.dead)
+	bullets = bullets.filter(func(b): return is_instance_valid(b))
+	ebullets = ebullets.filter(func(b): return is_instance_valid(b))
+	pickups = pickups.filter(func(p): return is_instance_valid(p))
+	if fx != null and fx.parts.size() > fx.max_parts:
+		fx.parts = fx.parts.slice(fx.parts.size() - fx.max_parts)
 
 func _spawn_wave() -> void:
 	var roll := randf()
@@ -406,6 +422,7 @@ func _spawn_boss() -> void:
 	shake(10.0)
 
 func on_enemy_killed(e: Node2D, coins: int) -> void:
+	enemies.erase(e)
 	kills += 1
 	combo += 1
 	combo_t = 2.6
@@ -574,6 +591,10 @@ func _update_quality(delta: float) -> void:
 
 func _set_quality(q: int) -> void:
 	quality = q
+	# render under the display resolution and let the stretch mode upscale: on a
+	# fill-bound machine this is worth more than every other change combined
+	var win := get_window()
+	win.content_scale_factor = [0.68, 0.85, 1.0][clampi(q, 0, 2)]
 	if world != null:
 		world.detail = q
 	# The die-cut edge is a polyline, not fill, so it stays at every level — it is

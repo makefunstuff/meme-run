@@ -73,7 +73,7 @@ func _draw() -> void:
 	Toy.sticker_pad = 2.5
 	var bob := sin(t * 3.0 + base_y) * 3.0
 	var glow_a := 0.5 + 0.2 * sin(t * 5.0)
-	Toy.glow(self, Vector2(0, bob), 26.0, glow_colour, glow_a * 0.8)
+	Toy.glow(self, Vector2(0, bob), 26.0, glow_colour, glow_a * 0.8, 3)
 	match kind:
 		"coin":
 			var w := 11.0 * absf(cos(t * 2.6))

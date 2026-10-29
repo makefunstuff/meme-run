@@ -260,7 +260,7 @@ func _draw_timeline() -> void:
 	draw_rect(Rect2(0, track_top + track_h + 3.0, w, 2.0), Color(0, 0, 0, 0.5))
 
 	# tick marks, scrolling with the world
-	var step := 38.0
+	var step := 54.0
 	var x0 := -fposmod(scroll * 1.0, step)
 	var x := x0
 	while x < w + step:
@@ -270,7 +270,7 @@ func _draw_timeline() -> void:
 		x += step
 
 	# candlesticks riding the track
-	var cstep := 52.0
+	var cstep := 74.0
 	var cx := -fposmod(scroll * 1.0, cstep)
 	while cx < w + cstep:
 		var seed := floorf((cx + scroll) / cstep)
@@ -304,8 +304,8 @@ func _draw_timeline() -> void:
 	var panel: Color = pal["panel"]
 	draw_rect(Rect2(0, panel_top, w, h - panel_top), panel)
 	# faint grid, like an empty feed
-	for i in 8:
-		var yy := panel_top + float(i) * 22.0
+	for i in 5:
+		var yy := panel_top + float(i) * 32.0
 		draw_rect(Rect2(0, yy, w, 1.0), Color(1, 1, 1, 0.025))
 	var gx := -fposmod(scroll * 1.0, 44.0)
 	while gx < w:

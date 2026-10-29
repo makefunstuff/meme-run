@@ -29,6 +29,7 @@ var banner_t := 0.0
 var banner_max := 2.6
 var toast_text := ""
 var toast_t := 0.0
+var show_perf := false
 
 const MODES := [
 	["classic", "CLASSIC", "the standard doomscroll"],
@@ -79,6 +80,9 @@ func _input(event: InputEvent) -> void:
 		elif state == "over":
 			if event.keycode in [KEY_ENTER, KEY_SPACE, KEY_R]:
 				_do("restart", null)
+		if event.keycode == KEY_F3:
+			show_perf = not show_perf
+			return
 		else:
 			if event.keycode == KEY_ESCAPE or event.keycode == KEY_P:
 				_do("pause", null)
@@ -338,6 +342,18 @@ func _draw_hud(vp: Vector2) -> void:
 			Color(1, 1, 1, a), HORIZONTAL_ALIGNMENT_CENTER, 5, Color(0.05, 0.02, 0.08, a))
 		Toy.text(self, Vector2(vp.x * 0.5, r2.position.y + 53), banner_sub, 11,
 			Color(0.8, 0.86, 0.95, a), HORIZONTAL_ALIGNMENT_CENTER)
+
+	# ---- perf readout (F3), so a frame-rate report is a number and not a feeling
+	if show_perf:
+		var fps := Engine.get_frames_per_second()
+		var tier: String = ["LOW", "MID", "HIGH"][clampi(game.quality, 0, 2)]
+		var txt := "%d fps · %s · %d draws" % [fps, tier,
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))]
+		var w2 := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		var pr := Rect2(26, 86, w2 + 20, 22)
+		Toy.shape(self, Toy.round_rect(pr, 6.0), Color(0.05, 0.03, 0.09, 0.8), Color(1, 1, 1, 0.2), 1.0)
+		Toy.text(self, Vector2(pr.position.x + 10, pr.position.y + 15), txt, 12,
+			Color(0.7, 1.0, 0.8) if fps >= 50 else (Color(1.0, 0.85, 0.5) if fps >= 35 else Color(1.0, 0.5, 0.55)))
 
 	# ---- toast
 	if toast_t > 0.0:

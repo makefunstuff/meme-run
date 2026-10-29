@@ -221,7 +221,7 @@ static func blush(ci: CanvasItem, centre: Vector2, s: float) -> void:
 ## additively instead of a screen-space blur pass, which the web renderer and
 ## a 2 MB download budget both appreciate.
 static func glow(ci: CanvasItem, centre: Vector2, r: float, colour: Color,
-		strength: float = 0.5, rings: int = 10) -> void:
+		strength: float = 0.5, rings: int = 4) -> void:
 	# radii shrink geometrically and alpha follows (1-t)^2, which reads as a
 	# smooth falloff; a handful of equal-alpha discs bands badly at this size.
 	for i in rings:

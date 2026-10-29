@@ -48,6 +48,13 @@ func setup(g: Node, pos: Vector2, v: Vector2, w: Dictionary, is_friendly: bool) 
 		"enemy": colour = Toy.RED; radius = 8.0
 		_: colour = Toy.WHITE
 
+func _exit_tree() -> void:
+	if game != null:
+		if friendly:
+			game.bullets.erase(self)
+		else:
+			game.ebullets.erase(self)
+
 func _physics_process(delta: float) -> void:
 	t += delta
 	life -= delta
@@ -72,9 +79,11 @@ func _physics_process(delta: float) -> void:
 	if grow:
 		radius = minf(radius + delta * 26.0, 26.0)
 
-	trail.append(global_position)
-	if trail.size() > 7:
-		trail.pop_front()
+	# only the heavy rounds get a smear; 7 circles per bolt was pure cost
+	if kind in ["orb", "rocket", "pump", "crew"]:
+		trail.append(global_position)
+		if trail.size() > 5:
+			trail.pop_front()
 
 	position += vel * delta
 
