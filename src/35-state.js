@@ -25,13 +25,15 @@ let invulnT = 0;          // bull run
 let scanT = 0;            // glitch/overlay pulse
 let coinRain = 0;
 
-/* quality */
+/* quality. post/ss/msaa drive the render chain in 16-post.js; grain and bloom
+   are the two that get cut first when a GPU starts to cook. */
 let qualityPref = 'auto';
-let QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high' };
+let QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high', post: true, ss: 1.3, msaa: 4, bloom: true, grain: true };
 function applyQuality(lvl) {
   QUAL.lvl = lvl;
-  if (lvl === 'low') QUAL = { lab: false, vig: false, line: false, fg: false, sh: false, band: false, glitch: false, parts: 110, dpr: 1, lvl: 'low' };
-  else if (lvl === 'mid') QUAL = { lab: true, vig: true, line: true, fg: false, sh: true, band: true, glitch: true, parts: 190, dpr: 1.25, lvl: 'mid' };
-  else QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high' };
+  if (lvl === 'low') QUAL = { lab: false, vig: false, line: false, fg: false, sh: false, band: false, glitch: false, parts: 110, dpr: 1, lvl: 'low', post: false, ss: 1, msaa: 0, bloom: false, grain: false };
+  else if (lvl === 'mid') QUAL = { lab: true, vig: true, line: true, fg: false, sh: true, band: true, glitch: true, parts: 190, dpr: 1.25, lvl: 'mid', post: true, ss: 1, msaa: 4, bloom: true, grain: false };
+  else QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high', post: true, ss: 1.3, msaa: 4, bloom: true, grain: true };
   sizeCanvas();
+  sizePost();
 }

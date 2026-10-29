@@ -29,12 +29,16 @@ const RIM = new THREE.Vector3(0.78, 0.24, 0.42).normalize();      // rim, lower-
 /* per-channel band multipliers: a warm key, a neutral mid, a cool fill so the
    shadow side keeps colour instead of turning to mud, and a deep band for the
    underside. All are >0 multipliers on the part's base colour. */
-const B_LIT = [1.40, 1.30, 1.11];
-const B_MID = [1.03, 1.01, 1.00];
-const B_SH = [0.85, 0.91, 1.10];
-const B_DEEP = [0.70, 0.76, 0.98];
-const RIM_T = [1.06, 1.12, 1.26];
-const RIM_K = 0.40;
+const B_LIT = [1.34, 1.25, 1.08];
+const B_MID = [1.02, 1.00, 1.00];
+const B_SH = [0.80, 0.87, 1.10];
+const B_DEEP = [0.64, 0.70, 0.96];
+const RIM_T = [1.06, 1.14, 1.34];
+const RIM_K = 0.55;
+/* a tight plastic highlight. Kits read as injection-moulded toys because the
+   bevels catch a small, hard specular instead of a soft gradient. */
+const SPEC_K = 0.30, SPEC_SHIN = 26.0;
+const _half = LIGHT.clone().add(new THREE.Vector3(0, 0, 1)).normalize();
 
 function col(hex, k) { const c = new THREE.Color(hex); return [c.r * k, c.g * k, c.b * k]; }
 
@@ -43,12 +47,15 @@ const _mul = [0, 0, 0];
 function bandOf(nx, ny, nz, vY) {
   const key = nx * LIGHT.x + ny * LIGHT.y + nz * LIGHT.z;
   const m = key > 0.62 ? B_LIT : key > 0.20 ? B_MID : key > -0.18 ? B_SH : B_DEEP;
-  const ao = 1 - 0.16 * (0.5 - (vY || 0));            // vY: part-local -0.5..0.5
+  const ao = 1 - 0.20 * (0.5 - (vY || 0));            // vY: part-local -0.5..0.5
   const r = Math.max(0, (nx * RIM.x + ny * RIM.y + nz * RIM.z) - 0.52) / 0.48;
   const s = r * r * RIM_K;
-  _mul[0] = m[0] * ao + s * RIM_T[0];
-  _mul[1] = m[1] * ao + s * RIM_T[1];
-  _mul[2] = m[2] * ao + s * RIM_T[2];
+  /* specular: only where the key actually mirrors toward the camera */
+  const h = Math.max(0, nx * _half.x + ny * _half.y + nz * _half.z);
+  const sp = h > 0.86 ? Math.pow((h - 0.86) / 0.14, SPEC_SHIN * 0.06) * SPEC_K * h : 0;
+  _mul[0] = m[0] * ao + s * RIM_T[0] + sp;
+  _mul[1] = m[1] * ao + s * RIM_T[1] + sp * 0.995;
+  _mul[2] = m[2] * ao + s * RIM_T[2] + sp * 0.97;
   return _mul;
 }
 

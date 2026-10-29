@@ -18,6 +18,7 @@ function tint(hex) {
   return c;
 }
 let shakeX = 0, shakeY = 0;
+let labelBudget = 5;
 
 /* page: 0 world, 1 entity, 2 text */
 const PB = [[0, 0], [1, 1], [2, 2]];
@@ -66,17 +67,23 @@ function fillW(x, y, w, h, col, a, add) {  // solid world rect (world units)
   BATCH[sp.page][add ? 1 : 0].push(sp, (x + w / 2 - camX) * SC + shakeX, -(GROUND + (y + h / 2) * SC + shakeY), w * SC, h * SC, 0, col, a);
 }
 
-/* ---------------- parallax helper ---------------- */
+/* ---------------- parallax helper ----------------
+   Tiles a layer across the screen. The offset has to wrap modulo ONE tile, not
+   modulo the whole strip: wrapping the strip left the offset anywhere in
+   [0, n*spacing), and since the loop only walked n+2 tiles from there, most of
+   the screen got no hills at all. */
 function layerCount(spacing) { return Math.ceil((W + 700) / spacing); }
 function repeat(n, spacing, factor, drawOne, t) {
-  const total = n * spacing;
   const cam = camX * factor;
-  const k = Math.floor(cam / total);
-  const off = cam - k * total;
-  for (let i = -1; i <= n + 1; i++) {
+  const iBase = Math.floor(cam / spacing);
+  const off = cam - iBase * spacing;
+  const count = Math.ceil((W + 720) / spacing) + 2;
+  for (let i = -1; i <= count; i++) {
     const x = i * spacing - off;
-    if (x < -320 || x > W + 320) continue;
-    drawOne(x, i - k * n, t);
+    if (x < -540 || x > W + 540) continue;
+    /* i + iBase is the absolute tile index, so a tile keeps its identity as the
+       camera moves instead of reshuffling every frame */
+    drawOne(x, i + iBase, t);
   }
 }
 
@@ -93,9 +100,9 @@ function drawSky(t) {
   const sx0 = W * 0.86, sy0 = H * 0.15;
   const lc = st();
   const ss = clamp(H / 700, 0.5, 1.3);
-  for (let i = 0; i < (QUAL.sh ? 4 : 0); i++) {
-    const a = -0.55 + i * 0.42 + Math.sin(t * 0.25 + i) * 0.05;
-    pushS(0, true, 'shaft', sx0, sy0, 156 * ss, 764 * ss, a, lc, 0.06);
+  for (let i = 0; i < (QUAL.sh ? 3 : 0); i++) {
+    const a = -0.48 + i * 0.40 + Math.sin(t * 0.25 + i) * 0.05;
+    pushS(0, true, 'shaft', sx0, sy0, 148 * ss, 764 * ss, a, lc, 0.035);
   }
   if (QUAL.band) {
     for (let i = 0; i < 4; i++) {
@@ -113,16 +120,16 @@ function drawSky(t) {
   /* the horizon haze, in the colour of the sky's lowest stop, so the ground
      joins the sky instead of being pasted under it */
   const sk = SKIES[(MODES[mode] || MODES.classic).sky] || SKIES[0];
-  s8('haze', 0, GROUND - 116, W, 116, 0, tint(sk[sk.length - 1][0]), 0.55);
+  s8('haze', 0, GROUND - 92, W, 94, 0, tint(sk[sk.length - 1][0]), 0.20);
 }
 function drawFarLayer(t) {
   const n = layerCount(300);
   repeat(n, 300, 0.055, (x, i) => {
     const v = Math.floor(hash(i * 3 + 1) * 4);
     const c = lt();
-    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, c, 0.5);
+    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, c, 0.62);
     const mon = Math.floor(hash(i * 11 + 2) * 13);
-    if (mon < 3) {
+    if (mon < 7) {
       const kinds = ['toilet', 'crew', 'crown', 'arch', 'eye'];
       const kind = kinds[Math.floor(hash(i * 13 + 4) * 5)];
       const r1 = hash(i * 3 + 1), r2 = hash(i * 7 + 5);
@@ -135,8 +142,8 @@ function drawMidLayer(t) {
   const n = layerCount(240);
   repeat(n, 240, 0.16, (x, i) => {
     const c = lt();
-    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, c, 0.72);
-    if (hash(i * 19 + 3) > 0.55) {
+    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, c, 0.94);
+    if (hash(i * 19 + 3) > 0.30) {
       const r1 = hash(i * 5 + 11);
       const bx = x + 30 + r1 * 80, by = -90 - hash(i * 23) * 60;
       pushW(0, false, 'bill' + (Math.floor(hash(i * 31) * 6) % 6), camX + bx / SC, by / SC,
@@ -145,16 +152,24 @@ function drawMidLayer(t) {
   }, t);
 }
 function drawCloudLayer(t) {
-  const n = layerCount(280);
-  repeat(n, 280, 0.3, (x, i) => {
-    const y = 50 + hash(i * 3) * (H * 0.36);
-    const s = 0.6 + hash(i * 7) * 0.8;
-    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 6, 104 * s, 72 * s, 0, lt(), 0.92);
+  /* far, small, pale: the layer that gives the sky depth */
+  const nf = layerCount(300);
+  repeat(nf, 300, 0.16, (x, i) => {
+    const y = 30 + hash(i * 5 + 3) * (H * 0.30);
+    const s = 0.42 + hash(i * 9) * 0.5;
+    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.22 + i) * 4, 104 * s, 72 * s, 0, lt(), 0.55);
+  }, t);
+  /* near: bigger, brighter, faster */
+  const n = layerCount(230);
+  repeat(n, 230, 0.3, (x, i) => {
+    const y = 52 + hash(i * 3) * (H * 0.34);
+    const s = 0.6 + hash(i * 7) * 0.85;
+    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 7, 104 * s, 72 * s, 0, lt(), 0.95);
   }, t);
 }
 function drawEyeLayer(t) {
-  const n = layerCount(430);
-  repeat(n, 430, 0.42, (x, i) => {
+  const n = layerCount(300);
+  repeat(n, 300, 0.42, (x, i) => {
     const y = 70 + hash(i * 13) * (H * 0.34);
     const r = 11 + hash(i * 17) * 12;
     const shut = Math.sin(t * 1.5 + i * 2) > 0.94;
@@ -166,13 +181,13 @@ function drawEyeLayer(t) {
   }, t);
 }
 function drawWordLayer(t) {
-  const n = layerCount(340);
-  repeat(n, 340, 0.52, (x, i) => {
+  const n = layerCount(260);
+  repeat(n, 260, 0.52, (x, i) => {
     const y = 60 + hash(i * 7 + 21) * (H * 0.42);
     const w = Math.floor(hash(i * 5 + 41) * 16) % 16;
     const s = (15 + hash(i * 9) * 14) / 26;
     pushS(0, false, 'w' + w, x, y + Math.sin(t * 0.8 + i) * 10, SPR['w' + w].w * s, SPR['w' + w].h * s,
-      (hash(i * 3 + 33) - 0.5) * 0.5, WHITE, 0.32);
+      (hash(i * 3 + 33) - 0.5) * 0.5, WHITE, 0.44);
   }, t);
 }
 function drawHeartLayer(t) {
@@ -203,7 +218,7 @@ function drawGround(t) {
   /* 310 wide for a 300 step: the tiles overlap, which hides the sampled seam
      at the atlas cell edge */
   for (let X = Math.floor(x0 / 300) * 300; X < x1; X += 300) gwr('strata', X, 30, 310, 460, 0, gt, 1);
-  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 46, 0, gt, 1);
+  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 56, 0, gt, 1);
   // grass + flowers
   const gs = 26;
   for (let i = Math.floor(x0 / gs); i * gs < x1; i++) {
@@ -212,6 +227,23 @@ function drawGround(t) {
     const X = i * gs + hash(i) * 18;
     gw('gr' + ((i % 3) + 3) % 3, X, 1, 1, Math.sin(t * 2 + i) * 0.08, WHITE, 0.55);
     if (h1 < 0.1) gw('fl' + (Math.floor(hash(i * 13) * 5) % 5), X + 8, -12, 1, 0, WHITE, 1);
+  }
+  /* a foreground row of taller weeds on the turf line: the play field needs a
+     bottom edge with something living on it, not a straight green cut */
+  for (let i = Math.floor(x0 / 62); i * 62 < x1; i++) {
+    const h1 = hash(i * 7 + 31);
+    if (h1 > 0.42) continue;
+    const X = i * 62 + hash(i * 3) * 28;
+    const sc = 1.25 + hash(i * 11) * 1.15;
+    gw('gr' + ((i % 3) + 3) % 3, X, -1, sc, Math.sin(t * 1.5 + i) * 0.10, [0.96, 1.0, 0.96], 0.62);
+    if (h1 < 0.10) gw('fl' + (Math.floor(hash(i * 13) * 5) % 5), X + 10, -9, 0.9, 0, WHITE, 1);
+  }
+  /* pebbles and debris at the very edge of the stage */
+  for (let i = Math.floor(x0 / 96); i * 96 < x1; i++) {
+    const r1 = hash(i * 17 + 9);
+    if (r1 > 0.5) continue;
+    const X = i * 96 + hash(i * 5) * 40, Y = 2 + r1 * 7;
+    gwr('shadow', X, Y, 10 + r1 * 16, 5 + r1 * 4, 0, [0.30, 0.22, 0.30], 0.30 + r1 * 0.2);
   }
   // buried bling
   for (let i = Math.floor(x0 / 150); i * 150 < x1; i++) {
@@ -259,9 +291,10 @@ function drawEnemy(e, t) {
     fillW(e.x - 20, e.y - e.r - 42, 40, 5, [0.15, 0.08, 0.18], 0.7);
     fillW(e.x - 20, e.y - e.r - 42, 40 * f, 5, tint(f > 0.5 ? '#7ff0a8' : '#ff5d73'), 0.95);
   }
-  if (QUAL.lab) {
+  if (QUAL.lab && labelBudget > 0) {
     const lbl = labelSprite(e.m.label);
     if (lbl) {
+      labelBudget--;
       /* a label is a caption, not a name tag: it fades out away from the
          player, so the feed is only annotated where it can be read */
       const d = Math.abs(e.x - (camX + W / SC * 0.42));
@@ -336,38 +369,55 @@ function drawHole(h, t) {
   pushK('holering', h.x, h.y, rr2 * 1.5, rr2 * 1.5, t * 2.2, null, k);
 }
 
+/* The player is assembled from separate kits so the run cycle is real motion.
+   Two things this has to get right:
+
+   - vertical order. World y is up, and the kit origin is its own centre, so the
+     head must be pushed at a SMALLER y than the body. Pushing it at a larger y
+     puts it at the player's feet, which is what made the character an
+     unreadable blob.
+   - scale. pushK multiplies by KS * SC itself, so what it is handed is a
+     multiple of the authored size, not a screen size. */
+
 function drawPlayerQuad(t) {
   const p = player;
   const airH = Math.max(0, -R - p.y);
   const shs = clamp(1 - airH / 260, 0.4, 1);
   pushW(0, false, 'shadow', camX + (p.x - R * 1.15 * shs) / SC, (gravDir > 0 ? 2 : CEIL) / SC,
     R * 2.3 * shs, 12 * shs, 0, [0.23, 0.14, 0.25], 0.28 * shs);
+
   const flick = invuln > 0 && Math.floor(invuln * 14) % 2 === 0 ? 0.42 : 1;
-  const bob = Math.sin(runPhase * 2) * 2.4;
+  const bob = Math.sin(runPhase * 2) * 2.0;
   const tilt = clamp(p.vy / 1600, -0.16, 0.22);
   const sq = p.squash;
   const spin = state === 'dying' ? deathSpin : 0;
-  const PKS = 1.28;
-  const psx = (1 + sq * 0.45) * KS * PKS, psy = (1 - sq * 0.45) * KS * PKS;
+  const PKS = 1.05;
+  const psx = (1 + sq * 0.45) * PKS;
+  const psy = (1 - sq * 0.45) * PKS;
+
   /* legs trail the run cycle: swing in screen Z, lift on the back stroke */
   for (let i = 0; i < 2; i++) {
     const ph = runPhase + i * Math.PI;
     const sw = Math.sin(ph) * 0.62 + spin;
-    const lift = Math.max(0, Math.cos(ph)) * 7;
-    pushK('pl_leg', p.x + Math.sin(ph) * 8, p.y + 4 - lift, PKS, PKS, sw, i ? '#ffc4d6' : null, flick);
+    const lift = Math.max(0, Math.cos(ph)) * 6;
+    pushK('pl_leg', p.x + Math.sin(ph) * 12, p.y + 8 + lift, PKS * 0.94, PKS * 0.94, sw, i ? '#ffc4d6' : null, flick);
   }
-  pushK('pl_body', p.x, p.y + bob + 4, psx, psy, tilt + spin, null, flick);
-  pushK('pl_head', p.x + 1, p.y + R * 1.05 + bob * 1.4, psx, psy, tilt * 0.55 + spin, null, flick);
-  const rec = recoil * 6;
-  const grot = -0.06 + p.aim * 0.12 + spin;
-  pushK('pl_arm', p.x + R * 0.2 - rec * 0.6, p.y + R * 0.16 + bob, PKS, PKS, -0.42 + Math.sin(runPhase) * 0.3 + spin, null, flick);
-  pushK('g_' + gunKind, p.x + R * 0.72 - rec, p.y + R * 0.1 + bob, PKS, PKS, grot, null, flick);
+  pushK('pl_body', p.x, p.y + 1 + bob, psx, psy, tilt + spin, null, flick);
+  pushK('pl_head', p.x + 1, p.y - 32 + bob * 1.3, psx, psy, tilt * 0.55 + spin, null, flick);
+
+  /* the far arm swings behind the body, the near arm holds the gun */
+  const rec = recoil * 5;
+  pushK('pl_arm', p.x - 5, p.y - 13 + bob, PKS, PKS, 0.5 - Math.sin(runPhase) * 0.35 + spin, '#c9435f', flick);
+  pushK('pl_arm', p.x + 7 - rec * 0.6, p.y - 12 + bob, PKS, PKS, -0.30 + Math.sin(runPhase) * 0.18 + spin, null, flick);
+  const grot = -0.05 + p.aim * 0.10 + spin;
+  pushK('g_' + gunKind, p.x + 17 - rec, p.y - 9 + bob, PKS, PKS, grot, null, flick);
+
   if (muzzle > 0) {
     const m = muzzle / 0.09;
-    pushW(1, true, 'flash', p.x + R * 0.86 - rec, p.y + R * 0.1 + bob, 68 * m, 68 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
+    pushW(1, true, 'flash', p.x + 27 - rec, p.y - 8.5 + bob, 64 * m, 64 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
   }
   if (shield > 0) {
-    wq('glow', p.x, p.y, 3.4, 0, tint('#8fd6ff'), 0.45 + Math.sin(t * 6) * 0.1, true);
+    wq('glow', p.x, p.y - 12, 3.4, 0, tint('#8fd6ff'), 0.45 + Math.sin(t * 6) * 0.1, true);
     pushK('pk_diamond', p.x + R * 1.1, p.y - R * 0.9, 0.8, 0.8, t * 1.2, null, 1);
   }
 }
@@ -444,7 +494,9 @@ function drawOverlayFx(t) {
       fillR((Math.random() - 0.5) * 40, yy, W, hh, tint(pick(['#ff2e88', '#2ee8ff', '#ffe27a'])), 0.10 + Math.random() * 0.16, true);
     }
   }
-  if (QUAL.vig) {
+  if (QUAL.vig && !POST.on) {
+    /* the composite pass does a shaped, coloured vignette of its own; the
+       baked one is only for when the chain is off */
     s8('vigb', 0, H - 190, W, 190, 0, WHITE, 0.9);
     s8('vig', 0, 0, W, H, 0, WHITE, 1);
   }

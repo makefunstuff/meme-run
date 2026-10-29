@@ -128,7 +128,7 @@ const O = o => Object.assign({ s: S }, o || {});
   B.add('rays', [-74, -74, 148, 148], bakeRays, { s: 1 });
   B.add('shaft', [-78, -2, 156, 764], bakeShaft, { s: 1 });
   ['#ffffff', '#ffd0e2', '#bdeee0'].forEach((col, i) => B.add('band' + i, [-6, -6, 412, 58], () => bakeBand(col), { s: 1 }));
-  B.add('road', [-2, -4, 92, 46], bakeRoadTile, { s: 1.5 });
+  B.add('road', [-2, -4, 92, 56], bakeRoadTile, { s: 1.6 });
   B.add('strata', [0, 0, 300, 460], bakeStrata, { s: 1 });
   B.add('ceil', [-2, -126, 92, 130], bakeCeilingStrip, { s: 1.5 });
   for (let i = 0; i < 3; i++) B.add('gr' + i, [-12, -18, 24, 22], () => bakeGrass(i * 3));

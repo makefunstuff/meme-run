@@ -526,6 +526,12 @@ class Quads {
 }
 
 /* ---------------- renderer / camera ---------------- */
+/* Display space end to end. The atlas art is authored in sRGB and the kit
+   vertex colours are authored against it; with colour management on, the kits
+   would round-trip linear while the quads never convert, and the two would
+   only agree on the canvas. Off makes the offscreen target and the canvas mean
+   the same thing, which is what the post chain needs. */
+THREE.ColorManagement.enabled = false;
 const cv = document.getElementById('game');
 /* antialias is not optional here: the cast is geometry, and a hard pixel edge
    on every primitive silhouette is the difference between toys and clipping. */
@@ -533,7 +539,9 @@ const renderer = new THREE.WebGLRenderer({ canvas: cv,
   alpha: false, antialias: true, powerPreference: 'high-performance', stencil: false, depth: false
 });
 renderer.autoClear = true;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.setClearColor(new THREE.Color('#10203a'), 1);
+renderer.shadowMap.enabled = false;
 const scene = new THREE.Scene();
 let W = 0, H = 0, DPR = 1, SC = 1, GROUND = 0;
 const camera = new THREE.OrthographicCamera(0, 1, 0, -1, -2000, 2000);
@@ -575,12 +583,16 @@ const RIM = new THREE.Vector3(0.78, 0.24, 0.42).normalize();      // rim, lower-
 /* per-channel band multipliers: a warm key, a neutral mid, a cool fill so the
    shadow side keeps colour instead of turning to mud, and a deep band for the
    underside. All are >0 multipliers on the part's base colour. */
-const B_LIT = [1.40, 1.30, 1.11];
-const B_MID = [1.03, 1.01, 1.00];
-const B_SH = [0.85, 0.91, 1.10];
-const B_DEEP = [0.70, 0.76, 0.98];
-const RIM_T = [1.06, 1.12, 1.26];
-const RIM_K = 0.40;
+const B_LIT = [1.34, 1.25, 1.08];
+const B_MID = [1.02, 1.00, 1.00];
+const B_SH = [0.80, 0.87, 1.10];
+const B_DEEP = [0.64, 0.70, 0.96];
+const RIM_T = [1.06, 1.14, 1.34];
+const RIM_K = 0.55;
+/* a tight plastic highlight. Kits read as injection-moulded toys because the
+   bevels catch a small, hard specular instead of a soft gradient. */
+const SPEC_K = 0.30, SPEC_SHIN = 26.0;
+const _half = LIGHT.clone().add(new THREE.Vector3(0, 0, 1)).normalize();
 
 function col(hex, k) { const c = new THREE.Color(hex); return [c.r * k, c.g * k, c.b * k]; }
 
@@ -589,12 +601,15 @@ const _mul = [0, 0, 0];
 function bandOf(nx, ny, nz, vY) {
   const key = nx * LIGHT.x + ny * LIGHT.y + nz * LIGHT.z;
   const m = key > 0.62 ? B_LIT : key > 0.20 ? B_MID : key > -0.18 ? B_SH : B_DEEP;
-  const ao = 1 - 0.16 * (0.5 - (vY || 0));            // vY: part-local -0.5..0.5
+  const ao = 1 - 0.20 * (0.5 - (vY || 0));            // vY: part-local -0.5..0.5
   const r = Math.max(0, (nx * RIM.x + ny * RIM.y + nz * RIM.z) - 0.52) / 0.48;
   const s = r * r * RIM_K;
-  _mul[0] = m[0] * ao + s * RIM_T[0];
-  _mul[1] = m[1] * ao + s * RIM_T[1];
-  _mul[2] = m[2] * ao + s * RIM_T[2];
+  /* specular: only where the key actually mirrors toward the camera */
+  const h = Math.max(0, nx * _half.x + ny * _half.y + nz * _half.z);
+  const sp = h > 0.86 ? Math.pow((h - 0.86) / 0.14, SPEC_SHIN * 0.06) * SPEC_K * h : 0;
+  _mul[0] = m[0] * ao + s * RIM_T[0] + sp;
+  _mul[1] = m[1] * ao + s * RIM_T[1] + sp * 0.995;
+  _mul[2] = m[2] * ao + s * RIM_T[2] + sp * 0.97;
   return _mul;
 }
 
@@ -1161,35 +1176,60 @@ function castMemes() {
 }
 
 function castPlayer() {
-  /* parts are pushed separately so the run cycle is real motion, not frames */
+  /* Parts are pushed separately so the run cycle is real motion, not frames.
+     Order inside each kit is paint order — this renderer has no depth test, so
+     the hood goes down before the skull and the fringe goes on after it. */
   return {
     pl_body: [
-      B(0, 4, -12, 24, 24, 12, '#d94f6c'),                    // backpack
-      B(0, 2, 0, 34, 34, 26, '#ff5d73'),                       // the hoodie
-      B(0, -14, 2, 30, 10, 24, '#e0476a', { ink: 0.8 }),       // hem
-      B(-11, 6, 12, 7, 16, 5, '#ffe27a', { ink: 0.5 }),        // the drawstrings
-      B(11, 6, 12, 7, 16, 5, '#ffe27a', { ink: 0.5 })
+      B(0, 3, -13, 23, 22, 12, '#d94f6c'),                     // backpack
+      B(0, 2, -15, 12, 10, 5, '#b93f5c', { ink: 0.7 }),        // pack lid
+      S(0, 12, -12, 19, '#d94f6c', { ink: 1.1 }),              // hood, pooled behind
+      B(-9, 7, -5, 4, 14, 5, '#e0476a', { ink: 0.5 }),         // straps
+      B(9, 7, -5, 4, 14, 5, '#e0476a', { ink: 0.5 }),
+      B(0, 2, 0, 34, 33, 25, '#ff5d73'),                       // the hoodie
+      B(0, -15, 1, 30, 8, 24, '#e0476a', { ink: 0.8 }),        // hem
+      B(0, -5, 12, 19, 10, 4, '#e0476a', { ink: 0.9 }),        // kangaroo pocket
+      CY(0, 16, -1, 10, 6, '#e0476a', { ink: 1.2 }),           // collar
+      CY(0, 18, 0, 5.5, 7, SKIN2, { ink: 0.9 }),               // neck
+      B(-11, 6, 12, 6, 15, 4, '#ffe27a', { ink: 0.5 }),        // drawstrings
+      B(11, 6, 12, 6, 15, 4, '#ffe27a', { ink: 0.5 }),
+      S(-11, -2, 13, 4, '#d9982f', { ink: 0.4 }),              // aglets
+      S(11, -2, 13, 4, '#d9982f', { ink: 0.4 })
     ],
     pl_head: [
-      B(0, 1, -16, 24, 16, 13, '#8a4a56'),                     // the hood, behind
-      S(0, 0, 0, 31, SKIN),
-      B(0, 12, 5, 27, 7, 21, '#743d4a', { rz: -0.05 }),        // the fringe, thin enough to keep the face
-      B(-13, 2, 12, 6, 7, 5, '#c98a5c', { ink: 0 }),           // ears
-      B(13, 2, 12, 6, 7, 5, '#c98a5c', { ink: 0 }),
-      ...eyePair(0, 3, 14, 4.8, { dx: 6.5, look: 0.55 }),
-      ...blush(0, -3, 13, 3.8),
-      mouth(0, -8, 15, 11, 5, '#8a3a4c')
+      RG(0, 0, 6, 17, '#8a4a56', { ink: 1.4 }),                // the hood opening
+      S(0, 0, 0, 32, SKIN),                                    // the skull
+      B(0, 11, 6, 26, 6, 17, '#743d4a', { rz: -0.04 }),        // the fringe
+      B(-13, 1, 10, 6, 7, 5, '#c98a5c', { ink: 0 }),           // ears
+      B(13, 1, 10, 6, 7, 5, '#c98a5c', { ink: 0 }),
+      ...eyePair(0, 2, 13, 4.9, { dx: 6.9, look: 0.5 }),
+      ...blush(0, -4, 12, 3.6),
+      mouth(0, -9, 14, 10, 4.6, '#8a3a4c')
     ],
-    pl_arm: [CP(0, 0, 0, 13, 12, '#ff5d73'), S(0, -16, 0, 13, SKIN, { ink: 0.9 })],
-    pl_leg: [B(0, 0, 0, 14, 22, 15, '#3f4a6b'), B(0, -14, 4, 19, 10, 20, '#ffd166')],
+    pl_arm: [
+      CP(0, 0, 0, 13, 15, '#ff5d73'),                          // sleeve
+      RG(0, -6, 0, 6.4, '#e0476a', { ink: 0.9 }),              // cuff
+      S(0, -16, 0, 12.5, SKIN, { ink: 0.9 })                   // hand
+    ],
+    pl_leg: [
+      B(0, -2, 0, 15, 20, 15, '#3f4a6b'),                      // thigh
+      B(0, -15, 3, 18, 8, 19, '#ffd166'),                      // trainer
+      B(0, -18.5, 4, 19.5, 5, 21, '#2c2233', { ink: 1.0 }),    // sole
+      B(0, -14, 11, 14, 5, 6, '#fff3e2', { ink: 0.6 }),        // toe cap
+      B(0, -10, 11, 6, 3, 3, '#ff5d73', { ink: 0.4 })          // lace tab
+    ],
     pl_gun: [B(0, 0, 0, 30, 12, 12, STEEL2)]
   };
 }
 
 function castGuns() {
   return {
-    g_blaster: [B(0, 0, 0, 36, 14, 14, '#5b6076'), B(20, 2, 0, 15, 10, 10, '#8fd6ff', { k: 1.3 }),
-      B(-15, -7, 0, 12, 16, 12, '#2f2a3a')],
+    g_blaster: [B(0, 0, 0, 34, 13, 13, '#5b6076'),
+      B(2, 7, 0, 24, 4, 9, '#43485c', { ink: 1.0 }),            // top rail
+      B(-4, -8, 0, 11, 15, 11, '#2f2a3a', { rz: 0.14 }),        // grip
+      CY(19, 1, 0, 5.6, 13, '#8fd6ff', { rz: UP, k: 1.3 }),     // barrel
+      RG(25, 1, 0, 6.2, '#c6cede', { ry: UP, ink: 1.0 }),       // muzzle ring
+      B(-14, 0, 0, 9, 10, 10, '#43485c', { ink: 1.0 })],        // stock
     g_bread: [B(0, 0, 0, 32, 24, 22, '#e8b072'), B(0, 13, 0, 26, 7, 18, '#c98b4a'), B(17, 0, 0, 11, 17, 15, '#f6d3a0')],
     g_prism: [B(0, 0, 0, 42, 12, 12, '#8fd6ff'), CN(26, 0, 0, 9, 18, '#ff9dbd', { rz: -UP, k: 1.15 }),
       B(-17, -5, 0, 13, 17, 13, '#4a6f8a')],
@@ -1339,6 +1379,277 @@ function makeKits() {
 }
 
 /* ============================================================
+   2. POST — the frame is drawn into an offscreen target and resolved
+   through a short chain before it reaches the canvas.
+
+   Why this exists: the world is drawn straight to the screen otherwise, so
+   every light source is just a flat sprite, every silhouette edge is one hard
+   pixel, and the palette is whatever each artist-tuned asset happened to be.
+   That is what reads as "clunky". The chain fixes all three at once:
+
+     scene -> HDR target (supersampled, MSAA)
+           -> bright pass  -> 1/2 blur -> 1/4 blur   (bloom)
+           -> composite    -> canvas                (grade, vignette, grain)
+
+   Colour management is switched off for the whole game (see boot): the atlas
+   art is authored in display space and the kits' vertex colours round-trip
+   through it unchanged, so the pipeline stays in display space end to end and
+   the target and the canvas agree on what a pixel means.
+   ============================================================ */
+
+/* per-mode grade. lift pulls the shadows toward the sky, gain pushes the
+   highlights toward the sun — the classic two-light grade, which is what ties
+   a scene of separately-drawn assets into one lit place. */
+const GRADE = {
+  classic: { lift: [0.014, 0.026, 0.055], gain: [1.060, 1.015, 0.945], sat: 1.20, con: 0.24, exp: 0.985, bloom: 0.34, vig: 0.46 },
+  degen:   { lift: [0.008, 0.040, 0.022], gain: [0.980, 1.050, 0.980], sat: 1.22, con: 0.28, exp: 0.985, bloom: 0.42, vig: 0.46 },
+  chaos:   { lift: [0.042, 0.018, 0.028], gain: [1.075, 0.990, 1.000], sat: 1.24, con: 0.30, exp: 0.990, bloom: 0.42, vig: 0.48 },
+  ohio:    { lift: [0.040, 0.012, 0.052], gain: [1.065, 0.985, 1.080], sat: 1.24, con: 0.30, exp: 0.985, bloom: 0.44, vig: 0.50 },
+  zen:     { lift: [0.022, 0.028, 0.036], gain: [1.020, 1.020, 1.035], sat: 1.02, con: 0.14, exp: 1.000, bloom: 0.30, vig: 0.34 }
+};
+const _grade = { lift: [0, 0, 0], gain: [1, 1, 1], sat: 1, con: 0.3, exp: 1, bloom: 0.6, vig: 0.35 };
+
+const POST = {
+  on: false, ready: false,
+  rt: null, b: [], quad: null, cam: null, sc: null,
+  pBright: null, pBlur: [], pComp: null,
+  w: 0, h: 0, bloomW: 0, bloomH: 0,
+  fail: 0
+};
+
+const FS_VERT = `
+varying vec2 vUv;
+void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+/* keep only what is genuinely bright, with a soft knee so lights turn on
+   gradually instead of popping at a threshold */
+const BRIGHT_FRAG = `
+uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uThresh, uKnee;
+varying vec2 vUv;
+void main() {
+  vec3 c = vec3(0.0);
+  /* 4-tap box on the way down: cheaper and stops a single hot pixel aliasing */
+  c += texture2D(tSrc, vUv + uTexel * vec2(-0.5, -0.5)).rgb;
+  c += texture2D(tSrc, vUv + uTexel * vec2( 0.5, -0.5)).rgb;
+  c += texture2D(tSrc, vUv + uTexel * vec2(-0.5,  0.5)).rgb;
+  c += texture2D(tSrc, vUv + uTexel * vec2( 0.5,  0.5)).rgb;
+  c *= 0.25;
+  float br = max(c.r, max(c.g, c.b));
+  float w = clamp((br - uThresh) / max(uKnee, 1e-4), 0.0, 1.0);
+  gl_FragColor = vec4(c * w * w, 1.0);
+}`;
+
+/* separable gaussian, 5 taps using linear filtering between them */
+const BLUR_FRAG = `
+uniform sampler2D tSrc; uniform vec2 uDir;
+varying vec2 vUv;
+void main() {
+  vec3 c = texture2D(tSrc, vUv).rgb * 0.2270270270;
+  c += (texture2D(tSrc, vUv + uDir * 1.3846153846).rgb + texture2D(tSrc, vUv - uDir * 1.3846153846).rgb) * 0.3162162162;
+  c += (texture2D(tSrc, vUv + uDir * 3.2307692308).rgb + texture2D(tSrc, vUv - uDir * 3.2307692308).rgb) * 0.0702702703;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
+const COMP_FRAG = `
+uniform sampler2D tScene, tB1, tB2;
+uniform vec2 uRes;
+uniform float uBloom, uGrain, uVig, uVigCol, uCA, uSat, uCon, uExp, uTime, uFlash, uAber;
+uniform vec3 uLift, uGain, uVigTint;
+varying vec2 vUv;
+
+/* the grade runs in display space, so every curve here is shaped to leave the
+   mids alone: only the highlights roll off and only the shadows get tinted. */
+void main() {
+  vec2 p = vUv - 0.5;
+  float r2 = dot(p, p);
+
+  /* lateral chromatic aberration: the lens bends the edges, not the centre.
+     Kept tiny — you should feel it, not see rainbow fringes. */
+  float ca = (uCA + uAber) * r2;
+  vec2 dir = p * ca;
+  vec3 c;
+  c.r = texture2D(tScene, vUv + dir).r;
+  c.g = texture2D(tScene, vUv).g;
+  c.b = texture2D(tScene, vUv - dir).b;
+
+  /* bloom: two radii mixed so near-glow stays tight and far-glow washes wide */
+  vec3 bl = texture2D(tB1, vUv).rgb * 0.66 + texture2D(tB2, vUv).rgb * 0.52;
+  c += bl * uBloom;
+
+  c *= uExp;
+
+  /* soft shoulder: additive light stacks past 1 in the HDR target, and this
+     rolls it to white instead of a flat clipped disc */
+  vec3 hi = max(vec3(0.0), c - 0.72);
+  c -= hi * hi * 0.62;
+
+  /* gentle S-curve about the mid — contrast where it reads, no crushed blacks */
+  c = mix(c, c * c * (3.0 - 2.0 * c), uCon);
+
+  /* two-light grade */
+  c = c * uGain + uLift;
+
+  /* vibrance rather than saturation: already-saturated pixels are protected so
+     the coins and the sun do not turn to laser paint */
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+  c = mix(vec3(l), c, clamp(uSat * (1.0 - 0.42 * (mx - mn)), 0.0, 2.0));
+
+  /* vignette, slightly coloured so the corners read as depth and not as dirt */
+  float v = smoothstep(0.16, 0.62, r2 * 1.9);
+  c = mix(c, c * uVigTint, v * uVig);
+
+  /* film grain — also the dither that keeps an 8-bit sky from banding */
+  float n = fract(sin(dot(gl_FragCoord.xy + vec2(uTime * 37.0, uTime * 17.0),
+                vec2(12.9898, 78.233))) * 43758.5453);
+  c += (n - 0.5) * uGrain;
+
+  c += uFlash;
+  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
+function rt(w, h, opt) {
+  return new THREE.WebGLRenderTarget(Math.max(2, w | 0), Math.max(2, h | 0),
+    Object.assign({ minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
+      generateMipmaps: false }, opt || {}));
+}
+function pass(frag, uniforms) {
+  const m = new THREE.ShaderMaterial({
+    uniforms, vertexShader: FS_VERT, fragmentShader: frag,
+    depthTest: false, depthWrite: false, transparent: false, toneMapped: false
+  });
+  const mesh = new THREE.Mesh(POST.quad, m);
+  mesh.frustumCulled = false;
+  return mesh;
+}
+function target(m) { return m.material.uniforms; }
+
+function initPost() {
+  POST.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  POST.sc = new THREE.Scene();
+  POST.quad = new THREE.PlaneGeometry(2, 2);
+  POST.hdr = (() => {
+    /* half-float so stacked additive light is real headroom and the shoulder
+       has something to roll off; fall back to 8-bit if the driver says no */
+    try { const p = rt(8, 8, { type: THREE.HalfFloatType }); p.dispose(); return THREE.HalfFloatType; }
+    catch (e) { return THREE.UnsignedByteType; }
+  })();
+
+  POST.pBright = pass(BRIGHT_FRAG, {
+    tSrc: { value: null }, uTexel: { value: new THREE.Vector2() },
+    uThresh: { value: 0.86 }, uKnee: { value: 0.22 }
+  });
+  for (let i = 0; i < 2; i++) {
+    POST.pBlur.push(pass(BLUR_FRAG, { tSrc: { value: null }, uDir: { value: new THREE.Vector2(1, 0) } }));
+  }
+  POST.pComp = pass(COMP_FRAG, {
+    tScene: { value: null }, tB1: { value: null }, tB2: { value: null },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uBloom: { value: 0.6 }, uGrain: { value: 0.016 }, uVig: { value: 0.34 },
+    uVigCol: { value: 0 }, uCA: { value: 0.0026 }, uSat: { value: 1.12 },
+    uCon: { value: 0.3 }, uExp: { value: 1.03 }, uTime: { value: 0 },
+    uFlash: { value: 0 }, uAber: { value: 0 },
+    uLift: { value: new THREE.Vector3() }, uGain: { value: new THREE.Vector3(1, 1, 1) },
+    uVigTint: { value: new THREE.Vector3(0.62, 0.55, 0.72) }
+  });
+  POST.ready = true;
+  sizePost();
+}
+
+/* (Re)allocate the chain for the current canvas size and quality level. */
+function sizePost() {
+  if (!POST.ready) return;
+  POST.on = !!QUAL.post;
+  /* internal render scale, relative to CSS px: supersample over the display's
+     own ratio, but never past 2x or the fill cost outweighs the softness */
+  const rs = Math.min(Math.max(DPR * (QUAL.ss || 1), DPR), 2);
+  const w = Math.round(W * rs), h = Math.round(H * rs);
+  if (!POST.on) {
+    if (POST.rt) { POST.rt.dispose(); POST.rt = null; POST.b.forEach(t => t.dispose()); POST.b = []; POST.w = 0; }
+    return;
+  }
+  if (POST.w === w && POST.h === h && POST.samples === (QUAL.msaa || 0)) return;
+  if (POST.rt) { POST.rt.dispose(); POST.b.forEach(t => t.dispose()); }
+  POST.rt = rt(w, h, { type: POST.hdr, samples: QUAL.msaa || 0 });
+  POST.rt.texture.colorSpace = THREE.NoColorSpace;
+  /* two bloom levels: half and quarter of the *frame*, so the cost is ~5% of
+     the main pass no matter how big the screen is */
+  const bw1 = w >> 1, bh1 = h >> 1, bw2 = w >> 2, bh2 = h >> 2;
+  POST.b = [rt(bw1, bh1), rt(bw1, bh1), rt(bw2, bh2), rt(bw2, bh2)];
+  POST.w = w; POST.h = h; POST.samples = QUAL.msaa || 0;
+  target(POST.pComp).uRes.value.set(w, h);
+}
+
+/* ease the grade toward the current mode so switching modes cross-fades
+   instead of snapping the whole frame's colour */
+function stepGrade(dt) {
+  const g = GRADE[mode] || GRADE.classic;
+  const k = clamp(dt * 3.2, 0, 1);
+  for (let i = 0; i < 3; i++) {
+    _grade.lift[i] += (g.lift[i] - _grade.lift[i]) * k;
+    _grade.gain[i] += (g.gain[i] - _grade.gain[i]) * k;
+  }
+  _grade.sat += (g.sat - _grade.sat) * k;
+  _grade.con += (g.con - _grade.con) * k;
+  _grade.exp += (g.exp - _grade.exp) * k;
+  _grade.bloom += (g.bloom - _grade.bloom) * k;
+  _grade.vig += (g.vig - _grade.vig) * k;
+}
+
+const blit = (mesh, to) => {
+  POST.sc.children.length = 0; POST.sc.add(mesh);
+  renderer.setRenderTarget(to); renderer.render(POST.sc, POST.cam);
+};
+
+/* The whole frame: world into the HDR target, bloom, then the graded resolve.
+   With post off this is exactly the old single draw to the canvas. */
+function renderFrame(t) {
+  if (!POST.on || !POST.rt) { renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
+  renderer.setRenderTarget(POST.rt);
+  renderer.render(scene, camera);
+
+  const u = target(POST.pComp);
+  /* --- bloom --- */
+  const hw = POST.w >> 1, hh = POST.h >> 1;
+  target(POST.pBright).tSrc.value = POST.rt.texture;
+  target(POST.pBright).uTexel.value.set(1 / POST.w, 1 / POST.h);
+  const hot = (boss && boss.hitFx > 0) ? 0.35 : 0;
+  target(POST.pBright).uThresh.value = 0.86 - hot * 0.14;
+
+  blit(POST.pBright, POST.b[0]);
+  const b1 = target(POST.pBlur[0]), b2 = target(POST.pBlur[1]);
+  b1.tSrc.value = POST.b[0].texture; b1.uDir.value.set(1.35 / hw, 0);
+  blit(POST.pBlur[0], POST.b[1]);
+  b1.tSrc.value = POST.b[1].texture; b1.uDir.value.set(0, 1.35 / hh);
+  blit(POST.pBlur[0], POST.b[0]);
+  b2.tSrc.value = POST.b[0].texture; b2.uDir.value.set(1.6 / (hw >> 1), 0);
+  blit(POST.pBlur[1], POST.b[2]);
+  b2.tSrc.value = POST.b[2].texture; b2.uDir.value.set(0, 1.6 / (hh >> 1));
+  blit(POST.pBlur[1], POST.b[3]);
+
+  /* --- composite --- */
+  u.tScene.value = POST.rt.texture;
+  u.tB1.value = POST.b[0].texture;
+  u.tB2.value = POST.b[3].texture;
+  u.uLift.value.set(_grade.lift[0], _grade.lift[1], _grade.lift[2]);
+  u.uGain.value.set(_grade.gain[0], _grade.gain[1], _grade.gain[2]);
+  u.uSat.value = _grade.sat;
+  u.uCon.value = _grade.con;
+  u.uExp.value = _grade.exp;
+  u.uBloom.value = _grade.bloom * (QUAL.bloom === false ? 0 : 1);
+  u.uVig.value = QUAL.vig ? _grade.vig : 0;
+  u.uTime.value = (t * 60) % 3600;
+  /* shake and damage push the lens: the hit you can feel in your teeth */
+  u.uAber.value = clamp(shake * 0.00042 + hurtFx * 0.010 + glitch * 0.006, 0, 0.02);
+  u.uCA.value = 0.0022 + clamp(player.x * 0.0000002, 0, 0.0016);
+  u.uGrain.value = QUAL.grain === false ? 0 : 0.015 + (mode === 'zen' ? -0.004 : 0) + glitch * 0.02;
+  u.uFlash.value = 0;
+
+  blit(POST.pComp, null);
+}
+
+/* ============================================================
    1. content: modes, skies, weapons, events, tickers
    ============================================================ */
 const R = 21;
@@ -1469,15 +1780,17 @@ let invulnT = 0;          // bull run
 let scanT = 0;            // glitch/overlay pulse
 let coinRain = 0;
 
-/* quality */
+/* quality. post/ss/msaa drive the render chain in 16-post.js; grain and bloom
+   are the two that get cut first when a GPU starts to cook. */
 let qualityPref = 'auto';
-let QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high' };
+let QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high', post: true, ss: 1.3, msaa: 4, bloom: true, grain: true };
 function applyQuality(lvl) {
   QUAL.lvl = lvl;
-  if (lvl === 'low') QUAL = { lab: false, vig: false, line: false, fg: false, sh: false, band: false, glitch: false, parts: 110, dpr: 1, lvl: 'low' };
-  else if (lvl === 'mid') QUAL = { lab: true, vig: true, line: true, fg: false, sh: true, band: true, glitch: true, parts: 190, dpr: 1.25, lvl: 'mid' };
-  else QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high' };
+  if (lvl === 'low') QUAL = { lab: false, vig: false, line: false, fg: false, sh: false, band: false, glitch: false, parts: 110, dpr: 1, lvl: 'low', post: false, ss: 1, msaa: 0, bloom: false, grain: false };
+  else if (lvl === 'mid') QUAL = { lab: true, vig: true, line: true, fg: false, sh: true, band: true, glitch: true, parts: 190, dpr: 1.25, lvl: 'mid', post: true, ss: 1, msaa: 4, bloom: true, grain: false };
+  else QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high', post: true, ss: 1.3, msaa: 4, bloom: true, grain: true };
   sizeCanvas();
+  sizePost();
 }
 
 function newPlayer() {
@@ -2806,43 +3119,77 @@ function bakeRoadTile() {
 /* The earth under the stage: warm soil, laid strata (periodic at 300 so the
    tiles join), pebbles and buried bling. */
 function bakeStrata() {
+  /* The earth under the stage. It fills the bottom fifth of every frame, so it
+     gets real strata: a warm lit crust, cold deep layers, buried junk and a
+     darkening toward the bottom of the screen. Periodic at 300 so tiles join. */
   const q = ctx.createLinearGradient(0, 0, 0, 460);
-  q.addColorStop(0, '#7d5539'); q.addColorStop(0.16, '#63402f');
-  q.addColorStop(0.52, '#4a3038'); q.addColorStop(1, '#2a1b28');
+  q.addColorStop(0, '#8a6041');
+  q.addColorStop(0.10, '#6f4833');
+  q.addColorStop(0.42, '#553a3a');
+  q.addColorStop(0.74, '#3d2a38');
+  q.addColorStop(1, '#241827');
   ctx.fillStyle = q; ctx.fillRect(0, 0, 300, 460);
-  ctx.fillStyle = rgba('#a8763f', 0.22); ctx.fillRect(0, 0, 300, 30);
-  ctx.globalAlpha = 0.42;
-  /* the strata run past the tile box into the bake pad, so the box edge is a
-     mid-stroke pixel and the tiles join without a seam */
-  [[52, '#c9905f', 3], [124, '#a8715a', 2], [198, '#8a5f6e', 5], [288, '#75506f', 3], [372, '#5f4066', 5], [430, '#4d3560', 2]]
-    .forEach(([yy, cc, lw], i) => {
-      ctx.strokeStyle = cc; ctx.lineWidth = lw;
-      ctx.beginPath();
-      for (let x = -8; x <= 308; x += 10) {
-        const y = yy + Math.sin(x * (TAU * (i + 1) / 2) / 300 + i * 1.7) * 7;
-        x === -8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    });
-  ctx.globalAlpha = 0.5;
-  for (let i = 0; i < 5; i++) {                    // buried pipes, the stage's plumbing
-    const x = 24 + hash(i * 17 + 5) * 250, y = 96 + hash(i * 7 + 3) * 300;
-    ctx.strokeStyle = rgba('#2c1d2a', 0.55); ctx.lineWidth = 9; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 46 + hash(i) * 40, y + 10); ctx.stroke();
-    ctx.strokeStyle = rgba('#8a6a7c', 0.35); ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(x, y - 2); ctx.lineTo(x + 40 + hash(i) * 36, y + 8); ctx.stroke();
+  /* the lit crust just under the turf */
+  const c2 = ctx.createLinearGradient(0, 0, 0, 34);
+  c2.addColorStop(0, 'rgba(196,142,84,0.85)');
+  c2.addColorStop(1, 'rgba(196,142,84,0)');
+  ctx.fillStyle = c2; ctx.fillRect(0, 0, 300, 34);
+
+  /* strata: each band is a filled ribbon with a lit top edge, which reads as
+     geology instead of a stripe */
+  const bands = [
+    [54, '#c08a55', 26, 0.30], [118, '#a2715d', 34, 0.26], [186, '#8a5f74', 42, 0.24],
+    [268, '#6e4d6e', 52, 0.22], [356, '#553c5e', 60, 0.20]
+  ];
+  bands.forEach(([yy, col, hh, a], i) => {
+    ctx.globalAlpha = a;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    for (let x = -8; x <= 308; x += 8) ctx.lineTo(x, yy + Math.sin(x * (TAU * (i + 1) / 300) + i * 1.7) * 8);
+    for (let x = 308; x >= -8; x -= 8) ctx.lineTo(x, yy + hh + Math.sin(x * (TAU * (i + 1) / 300) + i * 1.7) * 8);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = a * 0.9;
+    ctx.strokeStyle = 'rgba(226,178,132,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = -8; x <= 308; x += 8) {
+      const y = yy + Math.sin(x * (TAU * (i + 1) / 300) + i * 1.7) * 8;
+      x === -8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  /* buried pipes and roots */
+  ctx.globalAlpha = 0.45;
+  for (let i = 0; i < 6; i++) {
+    const x = 20 + hash(i * 17 + 5) * 250, y = 70 + hash(i * 7 + 3) * 320;
+    ctx.strokeStyle = 'rgba(34,22,34,0.7)'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 44 + hash(i) * 46, y + 9); ctx.stroke();
+    ctx.strokeStyle = 'rgba(150,116,132,0.45)'; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(x, y - 2); ctx.lineTo(x + 38 + hash(i) * 40, y + 7); ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  for (let i = 0; i < 30; i++) {                                    // stones
+
+  /* stones: lit on top, dark underneath */
+  for (let i = 0; i < 46; i++) {
     const r1 = hash(i * 7 + 3), r2 = hash(i * 11 + 9), r3 = hash(i * 3 + 5);
-    if (r1 > 0.42) {
-      const rx = 3 + r1 * 8;
-      ell(14 + r2 * 272, 56 + r3 * 390, rx, rx * 0.72);
-      ctx.fillStyle = rgba(r3 > 0.62 ? '#c8a07c' : '#3a2434', 0.34 - r3 * 0.12);
-      ctx.fill();
-    }
+    if (r1 > 0.52) continue;
+    const px = 10 + r2 * 280, py = 40 + r3 * 400, rx = 2.6 + r1 * 7;
+    ell(px, py, rx, rx * 0.68);
+    ctx.fillStyle = r3 > 0.6 ? 'rgba(198,156,116,0.34)' : 'rgba(30,20,32,0.42)';
+    ctx.fill();
+    ell(px, py - rx * 0.34, rx * 0.8, rx * 0.34);
+    ctx.fillStyle = 'rgba(240,200,160,0.16)'; ctx.fill();
+  }
+  /* a few bones of dead tokens, because it is that kind of world */
+  for (let i = 0; i < 4; i++) {
+    const px = 30 + hash(i * 23 + 7) * 240, py = 120 + hash(i * 31 + 11) * 240;
+    rrPath(px, py, 16, 7, 3.4);
+    ctx.fillStyle = 'rgba(226,206,196,0.20)'; ctx.fill();
+    rrPath(px + 14, py + 1, 7, 7, 3.4); ctx.fill();
   }
 }
+
 function bakeGrass(v) {
   for (let b = -1; b <= 1; b++) {
     poly([[b * 3 - 2, 0], [b * 3 + 2, 0], [b * 3 + (b * 2), -7 - hash(v + b) * 7]]);
@@ -3080,7 +3427,7 @@ const O = o => Object.assign({ s: S }, o || {});
   B.add('rays', [-74, -74, 148, 148], bakeRays, { s: 1 });
   B.add('shaft', [-78, -2, 156, 764], bakeShaft, { s: 1 });
   ['#ffffff', '#ffd0e2', '#bdeee0'].forEach((col, i) => B.add('band' + i, [-6, -6, 412, 58], () => bakeBand(col), { s: 1 }));
-  B.add('road', [-2, -4, 92, 46], bakeRoadTile, { s: 1.5 });
+  B.add('road', [-2, -4, 92, 56], bakeRoadTile, { s: 1.6 });
   B.add('strata', [0, 0, 300, 460], bakeStrata, { s: 1 });
   B.add('ceil', [-2, -126, 92, 130], bakeCeilingStrip, { s: 1.5 });
   for (let i = 0; i < 3; i++) B.add('gr' + i, [-12, -18, 24, 22], () => bakeGrass(i * 3));
@@ -3203,6 +3550,7 @@ function tint(hex) {
   return c;
 }
 let shakeX = 0, shakeY = 0;
+let labelBudget = 5;
 
 /* page: 0 world, 1 entity, 2 text */
 const PB = [[0, 0], [1, 1], [2, 2]];
@@ -3251,17 +3599,23 @@ function fillW(x, y, w, h, col, a, add) {  // solid world rect (world units)
   BATCH[sp.page][add ? 1 : 0].push(sp, (x + w / 2 - camX) * SC + shakeX, -(GROUND + (y + h / 2) * SC + shakeY), w * SC, h * SC, 0, col, a);
 }
 
-/* ---------------- parallax helper ---------------- */
+/* ---------------- parallax helper ----------------
+   Tiles a layer across the screen. The offset has to wrap modulo ONE tile, not
+   modulo the whole strip: wrapping the strip left the offset anywhere in
+   [0, n*spacing), and since the loop only walked n+2 tiles from there, most of
+   the screen got no hills at all. */
 function layerCount(spacing) { return Math.ceil((W + 700) / spacing); }
 function repeat(n, spacing, factor, drawOne, t) {
-  const total = n * spacing;
   const cam = camX * factor;
-  const k = Math.floor(cam / total);
-  const off = cam - k * total;
-  for (let i = -1; i <= n + 1; i++) {
+  const iBase = Math.floor(cam / spacing);
+  const off = cam - iBase * spacing;
+  const count = Math.ceil((W + 720) / spacing) + 2;
+  for (let i = -1; i <= count; i++) {
     const x = i * spacing - off;
-    if (x < -320 || x > W + 320) continue;
-    drawOne(x, i - k * n, t);
+    if (x < -540 || x > W + 540) continue;
+    /* i + iBase is the absolute tile index, so a tile keeps its identity as the
+       camera moves instead of reshuffling every frame */
+    drawOne(x, i + iBase, t);
   }
 }
 
@@ -3278,9 +3632,9 @@ function drawSky(t) {
   const sx0 = W * 0.86, sy0 = H * 0.15;
   const lc = st();
   const ss = clamp(H / 700, 0.5, 1.3);
-  for (let i = 0; i < (QUAL.sh ? 4 : 0); i++) {
-    const a = -0.55 + i * 0.42 + Math.sin(t * 0.25 + i) * 0.05;
-    pushS(0, true, 'shaft', sx0, sy0, 156 * ss, 764 * ss, a, lc, 0.06);
+  for (let i = 0; i < (QUAL.sh ? 3 : 0); i++) {
+    const a = -0.48 + i * 0.40 + Math.sin(t * 0.25 + i) * 0.05;
+    pushS(0, true, 'shaft', sx0, sy0, 148 * ss, 764 * ss, a, lc, 0.035);
   }
   if (QUAL.band) {
     for (let i = 0; i < 4; i++) {
@@ -3298,16 +3652,16 @@ function drawSky(t) {
   /* the horizon haze, in the colour of the sky's lowest stop, so the ground
      joins the sky instead of being pasted under it */
   const sk = SKIES[(MODES[mode] || MODES.classic).sky] || SKIES[0];
-  s8('haze', 0, GROUND - 116, W, 116, 0, tint(sk[sk.length - 1][0]), 0.55);
+  s8('haze', 0, GROUND - 92, W, 94, 0, tint(sk[sk.length - 1][0]), 0.20);
 }
 function drawFarLayer(t) {
   const n = layerCount(300);
   repeat(n, 300, 0.055, (x, i) => {
     const v = Math.floor(hash(i * 3 + 1) * 4);
     const c = lt();
-    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, c, 0.5);
+    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, c, 0.62);
     const mon = Math.floor(hash(i * 11 + 2) * 13);
-    if (mon < 3) {
+    if (mon < 7) {
       const kinds = ['toilet', 'crew', 'crown', 'arch', 'eye'];
       const kind = kinds[Math.floor(hash(i * 13 + 4) * 5)];
       const r1 = hash(i * 3 + 1), r2 = hash(i * 7 + 5);
@@ -3320,8 +3674,8 @@ function drawMidLayer(t) {
   const n = layerCount(240);
   repeat(n, 240, 0.16, (x, i) => {
     const c = lt();
-    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, c, 0.72);
-    if (hash(i * 19 + 3) > 0.55) {
+    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, c, 0.94);
+    if (hash(i * 19 + 3) > 0.30) {
       const r1 = hash(i * 5 + 11);
       const bx = x + 30 + r1 * 80, by = -90 - hash(i * 23) * 60;
       pushW(0, false, 'bill' + (Math.floor(hash(i * 31) * 6) % 6), camX + bx / SC, by / SC,
@@ -3330,16 +3684,24 @@ function drawMidLayer(t) {
   }, t);
 }
 function drawCloudLayer(t) {
-  const n = layerCount(280);
-  repeat(n, 280, 0.3, (x, i) => {
-    const y = 50 + hash(i * 3) * (H * 0.36);
-    const s = 0.6 + hash(i * 7) * 0.8;
-    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 6, 104 * s, 72 * s, 0, lt(), 0.92);
+  /* far, small, pale: the layer that gives the sky depth */
+  const nf = layerCount(300);
+  repeat(nf, 300, 0.16, (x, i) => {
+    const y = 30 + hash(i * 5 + 3) * (H * 0.30);
+    const s = 0.42 + hash(i * 9) * 0.5;
+    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.22 + i) * 4, 104 * s, 72 * s, 0, lt(), 0.55);
+  }, t);
+  /* near: bigger, brighter, faster */
+  const n = layerCount(230);
+  repeat(n, 230, 0.3, (x, i) => {
+    const y = 52 + hash(i * 3) * (H * 0.34);
+    const s = 0.6 + hash(i * 7) * 0.85;
+    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 7, 104 * s, 72 * s, 0, lt(), 0.95);
   }, t);
 }
 function drawEyeLayer(t) {
-  const n = layerCount(430);
-  repeat(n, 430, 0.42, (x, i) => {
+  const n = layerCount(300);
+  repeat(n, 300, 0.42, (x, i) => {
     const y = 70 + hash(i * 13) * (H * 0.34);
     const r = 11 + hash(i * 17) * 12;
     const shut = Math.sin(t * 1.5 + i * 2) > 0.94;
@@ -3351,13 +3713,13 @@ function drawEyeLayer(t) {
   }, t);
 }
 function drawWordLayer(t) {
-  const n = layerCount(340);
-  repeat(n, 340, 0.52, (x, i) => {
+  const n = layerCount(260);
+  repeat(n, 260, 0.52, (x, i) => {
     const y = 60 + hash(i * 7 + 21) * (H * 0.42);
     const w = Math.floor(hash(i * 5 + 41) * 16) % 16;
     const s = (15 + hash(i * 9) * 14) / 26;
     pushS(0, false, 'w' + w, x, y + Math.sin(t * 0.8 + i) * 10, SPR['w' + w].w * s, SPR['w' + w].h * s,
-      (hash(i * 3 + 33) - 0.5) * 0.5, WHITE, 0.32);
+      (hash(i * 3 + 33) - 0.5) * 0.5, WHITE, 0.44);
   }, t);
 }
 function drawHeartLayer(t) {
@@ -3388,7 +3750,7 @@ function drawGround(t) {
   /* 310 wide for a 300 step: the tiles overlap, which hides the sampled seam
      at the atlas cell edge */
   for (let X = Math.floor(x0 / 300) * 300; X < x1; X += 300) gwr('strata', X, 30, 310, 460, 0, gt, 1);
-  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 46, 0, gt, 1);
+  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 56, 0, gt, 1);
   // grass + flowers
   const gs = 26;
   for (let i = Math.floor(x0 / gs); i * gs < x1; i++) {
@@ -3397,6 +3759,23 @@ function drawGround(t) {
     const X = i * gs + hash(i) * 18;
     gw('gr' + ((i % 3) + 3) % 3, X, 1, 1, Math.sin(t * 2 + i) * 0.08, WHITE, 0.55);
     if (h1 < 0.1) gw('fl' + (Math.floor(hash(i * 13) * 5) % 5), X + 8, -12, 1, 0, WHITE, 1);
+  }
+  /* a foreground row of taller weeds on the turf line: the play field needs a
+     bottom edge with something living on it, not a straight green cut */
+  for (let i = Math.floor(x0 / 62); i * 62 < x1; i++) {
+    const h1 = hash(i * 7 + 31);
+    if (h1 > 0.42) continue;
+    const X = i * 62 + hash(i * 3) * 28;
+    const sc = 1.25 + hash(i * 11) * 1.15;
+    gw('gr' + ((i % 3) + 3) % 3, X, -1, sc, Math.sin(t * 1.5 + i) * 0.10, [0.96, 1.0, 0.96], 0.62);
+    if (h1 < 0.10) gw('fl' + (Math.floor(hash(i * 13) * 5) % 5), X + 10, -9, 0.9, 0, WHITE, 1);
+  }
+  /* pebbles and debris at the very edge of the stage */
+  for (let i = Math.floor(x0 / 96); i * 96 < x1; i++) {
+    const r1 = hash(i * 17 + 9);
+    if (r1 > 0.5) continue;
+    const X = i * 96 + hash(i * 5) * 40, Y = 2 + r1 * 7;
+    gwr('shadow', X, Y, 10 + r1 * 16, 5 + r1 * 4, 0, [0.30, 0.22, 0.30], 0.30 + r1 * 0.2);
   }
   // buried bling
   for (let i = Math.floor(x0 / 150); i * 150 < x1; i++) {
@@ -3444,9 +3823,10 @@ function drawEnemy(e, t) {
     fillW(e.x - 20, e.y - e.r - 42, 40, 5, [0.15, 0.08, 0.18], 0.7);
     fillW(e.x - 20, e.y - e.r - 42, 40 * f, 5, tint(f > 0.5 ? '#7ff0a8' : '#ff5d73'), 0.95);
   }
-  if (QUAL.lab) {
+  if (QUAL.lab && labelBudget > 0) {
     const lbl = labelSprite(e.m.label);
     if (lbl) {
+      labelBudget--;
       /* a label is a caption, not a name tag: it fades out away from the
          player, so the feed is only annotated where it can be read */
       const d = Math.abs(e.x - (camX + W / SC * 0.42));
@@ -3521,38 +3901,55 @@ function drawHole(h, t) {
   pushK('holering', h.x, h.y, rr2 * 1.5, rr2 * 1.5, t * 2.2, null, k);
 }
 
+/* The player is assembled from separate kits so the run cycle is real motion.
+   Two things this has to get right:
+
+   - vertical order. World y is up, and the kit origin is its own centre, so the
+     head must be pushed at a SMALLER y than the body. Pushing it at a larger y
+     puts it at the player's feet, which is what made the character an
+     unreadable blob.
+   - scale. pushK multiplies by KS * SC itself, so what it is handed is a
+     multiple of the authored size, not a screen size. */
+
 function drawPlayerQuad(t) {
   const p = player;
   const airH = Math.max(0, -R - p.y);
   const shs = clamp(1 - airH / 260, 0.4, 1);
   pushW(0, false, 'shadow', camX + (p.x - R * 1.15 * shs) / SC, (gravDir > 0 ? 2 : CEIL) / SC,
     R * 2.3 * shs, 12 * shs, 0, [0.23, 0.14, 0.25], 0.28 * shs);
+
   const flick = invuln > 0 && Math.floor(invuln * 14) % 2 === 0 ? 0.42 : 1;
-  const bob = Math.sin(runPhase * 2) * 2.4;
+  const bob = Math.sin(runPhase * 2) * 2.0;
   const tilt = clamp(p.vy / 1600, -0.16, 0.22);
   const sq = p.squash;
   const spin = state === 'dying' ? deathSpin : 0;
-  const PKS = 1.28;
-  const psx = (1 + sq * 0.45) * KS * PKS, psy = (1 - sq * 0.45) * KS * PKS;
+  const PKS = 1.05;
+  const psx = (1 + sq * 0.45) * PKS;
+  const psy = (1 - sq * 0.45) * PKS;
+
   /* legs trail the run cycle: swing in screen Z, lift on the back stroke */
   for (let i = 0; i < 2; i++) {
     const ph = runPhase + i * Math.PI;
     const sw = Math.sin(ph) * 0.62 + spin;
-    const lift = Math.max(0, Math.cos(ph)) * 7;
-    pushK('pl_leg', p.x + Math.sin(ph) * 8, p.y + 4 - lift, PKS, PKS, sw, i ? '#ffc4d6' : null, flick);
+    const lift = Math.max(0, Math.cos(ph)) * 6;
+    pushK('pl_leg', p.x + Math.sin(ph) * 12, p.y + 8 + lift, PKS * 0.94, PKS * 0.94, sw, i ? '#ffc4d6' : null, flick);
   }
-  pushK('pl_body', p.x, p.y + bob + 4, psx, psy, tilt + spin, null, flick);
-  pushK('pl_head', p.x + 1, p.y + R * 1.05 + bob * 1.4, psx, psy, tilt * 0.55 + spin, null, flick);
-  const rec = recoil * 6;
-  const grot = -0.06 + p.aim * 0.12 + spin;
-  pushK('pl_arm', p.x + R * 0.2 - rec * 0.6, p.y + R * 0.16 + bob, PKS, PKS, -0.42 + Math.sin(runPhase) * 0.3 + spin, null, flick);
-  pushK('g_' + gunKind, p.x + R * 0.72 - rec, p.y + R * 0.1 + bob, PKS, PKS, grot, null, flick);
+  pushK('pl_body', p.x, p.y + 1 + bob, psx, psy, tilt + spin, null, flick);
+  pushK('pl_head', p.x + 1, p.y - 32 + bob * 1.3, psx, psy, tilt * 0.55 + spin, null, flick);
+
+  /* the far arm swings behind the body, the near arm holds the gun */
+  const rec = recoil * 5;
+  pushK('pl_arm', p.x - 5, p.y - 13 + bob, PKS, PKS, 0.5 - Math.sin(runPhase) * 0.35 + spin, '#c9435f', flick);
+  pushK('pl_arm', p.x + 7 - rec * 0.6, p.y - 12 + bob, PKS, PKS, -0.30 + Math.sin(runPhase) * 0.18 + spin, null, flick);
+  const grot = -0.05 + p.aim * 0.10 + spin;
+  pushK('g_' + gunKind, p.x + 17 - rec, p.y - 9 + bob, PKS, PKS, grot, null, flick);
+
   if (muzzle > 0) {
     const m = muzzle / 0.09;
-    pushW(1, true, 'flash', p.x + R * 0.86 - rec, p.y + R * 0.1 + bob, 68 * m, 68 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
+    pushW(1, true, 'flash', p.x + 27 - rec, p.y - 8.5 + bob, 64 * m, 64 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
   }
   if (shield > 0) {
-    wq('glow', p.x, p.y, 3.4, 0, tint('#8fd6ff'), 0.45 + Math.sin(t * 6) * 0.1, true);
+    wq('glow', p.x, p.y - 12, 3.4, 0, tint('#8fd6ff'), 0.45 + Math.sin(t * 6) * 0.1, true);
     pushK('pk_diamond', p.x + R * 1.1, p.y - R * 0.9, 0.8, 0.8, t * 1.2, null, 1);
   }
 }
@@ -3629,7 +4026,9 @@ function drawOverlayFx(t) {
       fillR((Math.random() - 0.5) * 40, yy, W, hh, tint(pick(['#ff2e88', '#2ee8ff', '#ffe27a'])), 0.10 + Math.random() * 0.16, true);
     }
   }
-  if (QUAL.vig) {
+  if (QUAL.vig && !POST.on) {
+    /* the composite pass does a shaped, coloured vignette of its own; the
+       baked one is only for when the chain is off */
     s8('vigb', 0, H - 190, W, 190, 0, WHITE, 0.9);
     s8('vig', 0, 0, W, H, 0, WHITE, 1);
   }
@@ -4721,10 +5120,13 @@ function sizeCanvas() {
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   renderer.setPixelRatio(DPR);
   renderer.setSize(W, H, false);
-  SC = Math.max(0.5, Math.min(1.05, H / 860));
-  GROUND = Math.round(H * 0.72);
+  /* the play field sits closer than it used to: at 1.0 the cast was a
+     thumbnail on a big empty sky */
+  SC = Math.max(0.72, Math.min(1.32, H / 690));
+  GROUND = Math.round(H * 0.755);
   camera.left = 0; camera.right = W; camera.top = 0; camera.bottom = -H;
   camera.updateProjectionMatrix();
+  sizePost();
 }
 let resizeT = 0;
 window.addEventListener('resize', () => {
@@ -4799,6 +5201,7 @@ function frame(now) {
   for (const b of blocks) drawBlockObj(b, bgT);
   for (const h of holes) drawHole(h, bgT);
   for (const p of pickups) drawPickup(p, bgT);
+  labelBudget = 5;                 // a crowd of name tags is noise, not information
   for (const e of enemies) drawEnemy(e, bgT);
   drawBossQuad(bgT);
   for (const b of bullets) drawBullet(b);
@@ -4813,7 +5216,8 @@ function frame(now) {
 
   for (const k of keys) { BATCH[k][0].end(); BATCH[k][1].end(); }
   kitEndAll();
-  renderer.render(scene, camera);
+  stepGrade(dt);
+  renderFrame(bgT);
 
   syncBanner(); syncToast(); syncBossBar(); syncTape(dt);
   frameMs = performance.now() - t0;
@@ -4827,6 +5231,8 @@ resetWorld();
 (async () => {
   if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* fonts not ready */ } }
   bakeAll();
+  try { initPost(); } catch (e) { POST.on = false; console.warn('post chain off:', e.message); }
+  sizePost();
   $('tape').innerHTML = tapeHTML();
   last = performance.now();
   requestAnimationFrame(frame);
@@ -4846,7 +5252,9 @@ window.MEMERUN = {
     spr: Object.keys(SPR).length, kits: Object.keys(KITS).length,
     kitN: Object.keys(KITS).reduce((a, k) => a + KITS[k].n, 0),
     kitDraws: Object.keys(KITS).filter(k => KITS[k].n).length,
-    canvas: cv.width + 'x' + cv.height
+    canvas: cv.width + 'x' + cv.height,
+    post: POST.on ? (POST.w + 'x' + POST.h + ' msaa' + POST.samples + (POST.hdr === THREE.HalfFloatType ? ' hdr' : ' ldr')) : 'off',
+    postDraws: POST.on ? 5 : 0
   }),
   env: () => ({ W, H, SC, GROUND, DPR, camX, shakeX, shakeY }),
   sprites: () => SPR,

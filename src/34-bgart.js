@@ -199,43 +199,77 @@ function bakeRoadTile() {
 /* The earth under the stage: warm soil, laid strata (periodic at 300 so the
    tiles join), pebbles and buried bling. */
 function bakeStrata() {
+  /* The earth under the stage. It fills the bottom fifth of every frame, so it
+     gets real strata: a warm lit crust, cold deep layers, buried junk and a
+     darkening toward the bottom of the screen. Periodic at 300 so tiles join. */
   const q = ctx.createLinearGradient(0, 0, 0, 460);
-  q.addColorStop(0, '#7d5539'); q.addColorStop(0.16, '#63402f');
-  q.addColorStop(0.52, '#4a3038'); q.addColorStop(1, '#2a1b28');
+  q.addColorStop(0, '#8a6041');
+  q.addColorStop(0.10, '#6f4833');
+  q.addColorStop(0.42, '#553a3a');
+  q.addColorStop(0.74, '#3d2a38');
+  q.addColorStop(1, '#241827');
   ctx.fillStyle = q; ctx.fillRect(0, 0, 300, 460);
-  ctx.fillStyle = rgba('#a8763f', 0.22); ctx.fillRect(0, 0, 300, 30);
-  ctx.globalAlpha = 0.42;
-  /* the strata run past the tile box into the bake pad, so the box edge is a
-     mid-stroke pixel and the tiles join without a seam */
-  [[52, '#c9905f', 3], [124, '#a8715a', 2], [198, '#8a5f6e', 5], [288, '#75506f', 3], [372, '#5f4066', 5], [430, '#4d3560', 2]]
-    .forEach(([yy, cc, lw], i) => {
-      ctx.strokeStyle = cc; ctx.lineWidth = lw;
-      ctx.beginPath();
-      for (let x = -8; x <= 308; x += 10) {
-        const y = yy + Math.sin(x * (TAU * (i + 1) / 2) / 300 + i * 1.7) * 7;
-        x === -8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    });
-  ctx.globalAlpha = 0.5;
-  for (let i = 0; i < 5; i++) {                    // buried pipes, the stage's plumbing
-    const x = 24 + hash(i * 17 + 5) * 250, y = 96 + hash(i * 7 + 3) * 300;
-    ctx.strokeStyle = rgba('#2c1d2a', 0.55); ctx.lineWidth = 9; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 46 + hash(i) * 40, y + 10); ctx.stroke();
-    ctx.strokeStyle = rgba('#8a6a7c', 0.35); ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(x, y - 2); ctx.lineTo(x + 40 + hash(i) * 36, y + 8); ctx.stroke();
+  /* the lit crust just under the turf */
+  const c2 = ctx.createLinearGradient(0, 0, 0, 34);
+  c2.addColorStop(0, 'rgba(196,142,84,0.85)');
+  c2.addColorStop(1, 'rgba(196,142,84,0)');
+  ctx.fillStyle = c2; ctx.fillRect(0, 0, 300, 34);
+
+  /* strata: each band is a filled ribbon with a lit top edge, which reads as
+     geology instead of a stripe */
+  const bands = [
+    [54, '#c08a55', 26, 0.30], [118, '#a2715d', 34, 0.26], [186, '#8a5f74', 42, 0.24],
+    [268, '#6e4d6e', 52, 0.22], [356, '#553c5e', 60, 0.20]
+  ];
+  bands.forEach(([yy, col, hh, a], i) => {
+    ctx.globalAlpha = a;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    for (let x = -8; x <= 308; x += 8) ctx.lineTo(x, yy + Math.sin(x * (TAU * (i + 1) / 300) + i * 1.7) * 8);
+    for (let x = 308; x >= -8; x -= 8) ctx.lineTo(x, yy + hh + Math.sin(x * (TAU * (i + 1) / 300) + i * 1.7) * 8);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = a * 0.9;
+    ctx.strokeStyle = 'rgba(226,178,132,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = -8; x <= 308; x += 8) {
+      const y = yy + Math.sin(x * (TAU * (i + 1) / 300) + i * 1.7) * 8;
+      x === -8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  /* buried pipes and roots */
+  ctx.globalAlpha = 0.45;
+  for (let i = 0; i < 6; i++) {
+    const x = 20 + hash(i * 17 + 5) * 250, y = 70 + hash(i * 7 + 3) * 320;
+    ctx.strokeStyle = 'rgba(34,22,34,0.7)'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 44 + hash(i) * 46, y + 9); ctx.stroke();
+    ctx.strokeStyle = 'rgba(150,116,132,0.45)'; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(x, y - 2); ctx.lineTo(x + 38 + hash(i) * 40, y + 7); ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  for (let i = 0; i < 30; i++) {                                    // stones
+
+  /* stones: lit on top, dark underneath */
+  for (let i = 0; i < 46; i++) {
     const r1 = hash(i * 7 + 3), r2 = hash(i * 11 + 9), r3 = hash(i * 3 + 5);
-    if (r1 > 0.42) {
-      const rx = 3 + r1 * 8;
-      ell(14 + r2 * 272, 56 + r3 * 390, rx, rx * 0.72);
-      ctx.fillStyle = rgba(r3 > 0.62 ? '#c8a07c' : '#3a2434', 0.34 - r3 * 0.12);
-      ctx.fill();
-    }
+    if (r1 > 0.52) continue;
+    const px = 10 + r2 * 280, py = 40 + r3 * 400, rx = 2.6 + r1 * 7;
+    ell(px, py, rx, rx * 0.68);
+    ctx.fillStyle = r3 > 0.6 ? 'rgba(198,156,116,0.34)' : 'rgba(30,20,32,0.42)';
+    ctx.fill();
+    ell(px, py - rx * 0.34, rx * 0.8, rx * 0.34);
+    ctx.fillStyle = 'rgba(240,200,160,0.16)'; ctx.fill();
+  }
+  /* a few bones of dead tokens, because it is that kind of world */
+  for (let i = 0; i < 4; i++) {
+    const px = 30 + hash(i * 23 + 7) * 240, py = 120 + hash(i * 31 + 11) * 240;
+    rrPath(px, py, 16, 7, 3.4);
+    ctx.fillStyle = 'rgba(226,206,196,0.20)'; ctx.fill();
+    rrPath(px + 14, py + 1, 7, 7, 3.4); ctx.fill();
   }
 }
+
 function bakeGrass(v) {
   for (let b = -1; b <= 1; b++) {
     poly([[b * 3 - 2, 0], [b * 3 + 2, 0], [b * 3 + (b * 2), -7 - hash(v + b) * 7]]);

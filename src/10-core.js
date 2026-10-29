@@ -226,6 +226,12 @@ class Quads {
 }
 
 /* ---------------- renderer / camera ---------------- */
+/* Display space end to end. The atlas art is authored in sRGB and the kit
+   vertex colours are authored against it; with colour management on, the kits
+   would round-trip linear while the quads never convert, and the two would
+   only agree on the canvas. Off makes the offscreen target and the canvas mean
+   the same thing, which is what the post chain needs. */
+THREE.ColorManagement.enabled = false;
 const cv = document.getElementById('game');
 /* antialias is not optional here: the cast is geometry, and a hard pixel edge
    on every primitive silhouette is the difference between toys and clipping. */
@@ -233,7 +239,9 @@ const renderer = new THREE.WebGLRenderer({ canvas: cv,
   alpha: false, antialias: true, powerPreference: 'high-performance', stencil: false, depth: false
 });
 renderer.autoClear = true;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.setClearColor(new THREE.Color('#10203a'), 1);
+renderer.shadowMap.enabled = false;
 const scene = new THREE.Scene();
 let W = 0, H = 0, DPR = 1, SC = 1, GROUND = 0;
 const camera = new THREE.OrthographicCamera(0, 1, 0, -1, -2000, 2000);

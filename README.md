@@ -59,6 +59,15 @@ Score is **PNL**, shown as `$` in the HUD, paid out as a **WAGMI BAG** on death.
   `feet`, `ears`) so the cast reads as one toy line.
   A kit's triangles are ordered shell-first, body-after: that is a painter's algorithm for a sticker,
   which is why the renderer needs no depth buffer at all.
+- **The frame goes through a post chain** (`src/16-post.js`). The world renders into an HDR,
+  MSAA'd, supersampled target; a bright pass feeds a two-level separable blur for bloom; a composite
+  pass then does the grade — a soft highlight shoulder so stacked additive light rolls to white
+  instead of clipping, a gentle S-curve, a two-light lift/gain per mode, vibrance, a tinted vignette
+  and film grain that doubles as dither against 8-bit sky banding. Slight lateral chromatic
+  aberration is driven by shake and damage, so a hit registers in the lens as well as in the world.
+  Colour management is switched off end to end (`THREE.ColorManagement.enabled = false`) because the
+  atlas art is authored in display space: that keeps the offscreen target and the canvas meaning the
+  same thing, so what the artist tuned is what ships.
 - **MSAA is on** (`antialias: true`): a hard pixel edge on every primitive silhouette is what makes
   geometry look cheap.
 - One kit type = one `InstancedMesh` = one draw call (~93 kit types, ~65 of them live in a chaos

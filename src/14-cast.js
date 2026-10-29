@@ -309,35 +309,60 @@ function castMemes() {
 }
 
 function castPlayer() {
-  /* parts are pushed separately so the run cycle is real motion, not frames */
+  /* Parts are pushed separately so the run cycle is real motion, not frames.
+     Order inside each kit is paint order — this renderer has no depth test, so
+     the hood goes down before the skull and the fringe goes on after it. */
   return {
     pl_body: [
-      B(0, 4, -12, 24, 24, 12, '#d94f6c'),                    // backpack
-      B(0, 2, 0, 34, 34, 26, '#ff5d73'),                       // the hoodie
-      B(0, -14, 2, 30, 10, 24, '#e0476a', { ink: 0.8 }),       // hem
-      B(-11, 6, 12, 7, 16, 5, '#ffe27a', { ink: 0.5 }),        // the drawstrings
-      B(11, 6, 12, 7, 16, 5, '#ffe27a', { ink: 0.5 })
+      B(0, 3, -13, 23, 22, 12, '#d94f6c'),                     // backpack
+      B(0, 2, -15, 12, 10, 5, '#b93f5c', { ink: 0.7 }),        // pack lid
+      S(0, 12, -12, 19, '#d94f6c', { ink: 1.1 }),              // hood, pooled behind
+      B(-9, 7, -5, 4, 14, 5, '#e0476a', { ink: 0.5 }),         // straps
+      B(9, 7, -5, 4, 14, 5, '#e0476a', { ink: 0.5 }),
+      B(0, 2, 0, 34, 33, 25, '#ff5d73'),                       // the hoodie
+      B(0, -15, 1, 30, 8, 24, '#e0476a', { ink: 0.8 }),        // hem
+      B(0, -5, 12, 19, 10, 4, '#e0476a', { ink: 0.9 }),        // kangaroo pocket
+      CY(0, 16, -1, 10, 6, '#e0476a', { ink: 1.2 }),           // collar
+      CY(0, 18, 0, 5.5, 7, SKIN2, { ink: 0.9 }),               // neck
+      B(-11, 6, 12, 6, 15, 4, '#ffe27a', { ink: 0.5 }),        // drawstrings
+      B(11, 6, 12, 6, 15, 4, '#ffe27a', { ink: 0.5 }),
+      S(-11, -2, 13, 4, '#d9982f', { ink: 0.4 }),              // aglets
+      S(11, -2, 13, 4, '#d9982f', { ink: 0.4 })
     ],
     pl_head: [
-      B(0, 1, -16, 24, 16, 13, '#8a4a56'),                     // the hood, behind
-      S(0, 0, 0, 31, SKIN),
-      B(0, 12, 5, 27, 7, 21, '#743d4a', { rz: -0.05 }),        // the fringe, thin enough to keep the face
-      B(-13, 2, 12, 6, 7, 5, '#c98a5c', { ink: 0 }),           // ears
-      B(13, 2, 12, 6, 7, 5, '#c98a5c', { ink: 0 }),
-      ...eyePair(0, 3, 14, 4.8, { dx: 6.5, look: 0.55 }),
-      ...blush(0, -3, 13, 3.8),
-      mouth(0, -8, 15, 11, 5, '#8a3a4c')
+      RG(0, 0, 6, 17, '#8a4a56', { ink: 1.4 }),                // the hood opening
+      S(0, 0, 0, 32, SKIN),                                    // the skull
+      B(0, 11, 6, 26, 6, 17, '#743d4a', { rz: -0.04 }),        // the fringe
+      B(-13, 1, 10, 6, 7, 5, '#c98a5c', { ink: 0 }),           // ears
+      B(13, 1, 10, 6, 7, 5, '#c98a5c', { ink: 0 }),
+      ...eyePair(0, 2, 13, 4.9, { dx: 6.9, look: 0.5 }),
+      ...blush(0, -4, 12, 3.6),
+      mouth(0, -9, 14, 10, 4.6, '#8a3a4c')
     ],
-    pl_arm: [CP(0, 0, 0, 13, 12, '#ff5d73'), S(0, -16, 0, 13, SKIN, { ink: 0.9 })],
-    pl_leg: [B(0, 0, 0, 14, 22, 15, '#3f4a6b'), B(0, -14, 4, 19, 10, 20, '#ffd166')],
+    pl_arm: [
+      CP(0, 0, 0, 13, 15, '#ff5d73'),                          // sleeve
+      RG(0, -6, 0, 6.4, '#e0476a', { ink: 0.9 }),              // cuff
+      S(0, -16, 0, 12.5, SKIN, { ink: 0.9 })                   // hand
+    ],
+    pl_leg: [
+      B(0, -2, 0, 15, 20, 15, '#3f4a6b'),                      // thigh
+      B(0, -15, 3, 18, 8, 19, '#ffd166'),                      // trainer
+      B(0, -18.5, 4, 19.5, 5, 21, '#2c2233', { ink: 1.0 }),    // sole
+      B(0, -14, 11, 14, 5, 6, '#fff3e2', { ink: 0.6 }),        // toe cap
+      B(0, -10, 11, 6, 3, 3, '#ff5d73', { ink: 0.4 })          // lace tab
+    ],
     pl_gun: [B(0, 0, 0, 30, 12, 12, STEEL2)]
   };
 }
 
 function castGuns() {
   return {
-    g_blaster: [B(0, 0, 0, 36, 14, 14, '#5b6076'), B(20, 2, 0, 15, 10, 10, '#8fd6ff', { k: 1.3 }),
-      B(-15, -7, 0, 12, 16, 12, '#2f2a3a')],
+    g_blaster: [B(0, 0, 0, 34, 13, 13, '#5b6076'),
+      B(2, 7, 0, 24, 4, 9, '#43485c', { ink: 1.0 }),            // top rail
+      B(-4, -8, 0, 11, 15, 11, '#2f2a3a', { rz: 0.14 }),        // grip
+      CY(19, 1, 0, 5.6, 13, '#8fd6ff', { rz: UP, k: 1.3 }),     // barrel
+      RG(25, 1, 0, 6.2, '#c6cede', { ry: UP, ink: 1.0 }),       // muzzle ring
+      B(-14, 0, 0, 9, 10, 10, '#43485c', { ink: 1.0 })],        // stock
     g_bread: [B(0, 0, 0, 32, 24, 22, '#e8b072'), B(0, 13, 0, 26, 7, 18, '#c98b4a'), B(17, 0, 0, 11, 17, 15, '#f6d3a0')],
     g_prism: [B(0, 0, 0, 42, 12, 12, '#8fd6ff'), CN(26, 0, 0, 9, 18, '#ff9dbd', { rz: -UP, k: 1.15 }),
       B(-17, -5, 0, 13, 17, 13, '#4a6f8a')],

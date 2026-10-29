@@ -7,10 +7,13 @@ function sizeCanvas() {
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   renderer.setPixelRatio(DPR);
   renderer.setSize(W, H, false);
-  SC = Math.max(0.5, Math.min(1.05, H / 860));
-  GROUND = Math.round(H * 0.72);
+  /* the play field sits closer than it used to: at 1.0 the cast was a
+     thumbnail on a big empty sky */
+  SC = Math.max(0.72, Math.min(1.32, H / 690));
+  GROUND = Math.round(H * 0.755);
   camera.left = 0; camera.right = W; camera.top = 0; camera.bottom = -H;
   camera.updateProjectionMatrix();
+  sizePost();
 }
 let resizeT = 0;
 window.addEventListener('resize', () => {
@@ -85,6 +88,7 @@ function frame(now) {
   for (const b of blocks) drawBlockObj(b, bgT);
   for (const h of holes) drawHole(h, bgT);
   for (const p of pickups) drawPickup(p, bgT);
+  labelBudget = 5;                 // a crowd of name tags is noise, not information
   for (const e of enemies) drawEnemy(e, bgT);
   drawBossQuad(bgT);
   for (const b of bullets) drawBullet(b);
@@ -99,7 +103,8 @@ function frame(now) {
 
   for (const k of keys) { BATCH[k][0].end(); BATCH[k][1].end(); }
   kitEndAll();
-  renderer.render(scene, camera);
+  stepGrade(dt);
+  renderFrame(bgT);
 
   syncBanner(); syncToast(); syncBossBar(); syncTape(dt);
   frameMs = performance.now() - t0;
@@ -113,6 +118,8 @@ resetWorld();
 (async () => {
   if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* fonts not ready */ } }
   bakeAll();
+  try { initPost(); } catch (e) { POST.on = false; console.warn('post chain off:', e.message); }
+  sizePost();
   $('tape').innerHTML = tapeHTML();
   last = performance.now();
   requestAnimationFrame(frame);
@@ -132,7 +139,9 @@ window.MEMERUN = {
     spr: Object.keys(SPR).length, kits: Object.keys(KITS).length,
     kitN: Object.keys(KITS).reduce((a, k) => a + KITS[k].n, 0),
     kitDraws: Object.keys(KITS).filter(k => KITS[k].n).length,
-    canvas: cv.width + 'x' + cv.height
+    canvas: cv.width + 'x' + cv.height,
+    post: POST.on ? (POST.w + 'x' + POST.h + ' msaa' + POST.samples + (POST.hdr === THREE.HalfFloatType ? ' hdr' : ' ldr')) : 'off',
+    postDraws: POST.on ? 5 : 0
   }),
   env: () => ({ W, H, SC, GROUND, DPR, camX, shakeX, shakeY }),
   sprites: () => SPR,
