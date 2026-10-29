@@ -8,7 +8,9 @@ FILES="src/00-head.html src/10-core.js src/12-kit.js src/14-cast.js src/16-post.
 src/20-art.js src/32-artdegen.js src/34-bgart.js src/40-bake.js src/50-draw.js \
 src/50-spawn.js src/60-game.js src/65-fx.js src/70-flow.js src/90-main.js"
 
-out=${1:-index.html}
+# The repo root is now the Godot build's landing page, so the three.js build
+# writes to legacy/ by default. Pass a path to override.
+out=${1:-legacy/threejs.html}
 tmp="$out.new"
 rm -f "$tmp"
 for f in $FILES; do

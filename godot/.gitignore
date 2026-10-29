@@ -1,0 +1,4 @@
+# Godot's import cache and derived files
+.godot/
+*.translation
+export_presets.cfg.bak

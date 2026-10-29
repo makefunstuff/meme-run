@@ -1,15 +1,83 @@
 # MEME RUN
 
-Endless auto-runner brainrot shooter with an open market. Modes, weapons, reality events, a boss,
-and a P&L that means nothing.
+An endless brainrot shooter about outrunning the feed. **The playable build on
+GitHub Pages is now the Godot version** (`godot/`); the three.js build that came
+before it is preserved at `legacy/threejs.html`.
 
-**Live:** https://makefunstuff.github.io/meme-run/
+- Play: <https://makefunstuff.github.io/meme-run/>
+- Godot source: `godot/` (open the folder in the Godot editor)
+- Web export: `web/` (regenerate with `godot/export.sh`)
+- Previous three.js build: `legacy/threejs.html`, sources in `src/`, `./build.sh`
 
-## Controls
+## The Godot edition
 
-- **Desktop:** `SPACE` / `↑` / `W` jump, hold `F` (or `J`) to shoot.
-- **`V`** fps meter (real frame interval, quad count, render size). **`Q`** cycles GPU quality: `AUTO → HIGH → LOW`.
-- **Phone:** tap the left half to jump, hold the right half (or **SHOOT**) to fire.
+Rebuilt from scratch in Godot 4.7 rather than ported, because most of what made
+the old build feel clunky was structural.
+
+**Mechanics**
+- Auto-run, but the control is real: coyote time, a jump buffer, variable jump
+  height, a double jump, a dash with invulnerability frames, and air control
+  that steers. Landing and jumping squash the character.
+- Nine weapons with genuinely different feel — the shotgun knocks you backwards,
+  the laser pierces, the rocket explodes, the void orb pulls, the crew round
+  homes. Ammo runs out and drops you back to the blaster.
+- Seven enemy archetypes with distinct rules, not reskins: walkers, sine-wave
+  flyers, chargers that telegraph and then dash, shooters that keep a firing
+  distance, brutes, splitters that break into two on death, and drifters.
+- A boss on a cadence with three phases. Every attack is telegraphed — the eye
+  narrows before a volley, the phone tilts before a dive — so the fight is
+  readable rather than arbitrary.
+- Combo multiplier, magnetised coins, pickups, four modes with their own pacing.
+
+**Feel**
+- Hitstop on heavy hits (wall-clock based, so it cannot scale itself), camera
+  shake that moves the backdrop too, screen-edge flash on damage, muzzle light,
+  shell casings, squash and stretch.
+- Floating damage and P&L numbers, particle bursts per event rather than one
+  generic puff.
+
+**Graphics**
+- No imported art at all: every character, prop and background element is drawn
+  from arcs, rounded rectangles and polygons (`godot/src/toy.gd`). That keeps the
+  download small, keeps shapes crisp at any resolution, and means one palette
+  change re-skins the game.
+- Three parallax ridge layers generated from summed sines, a two-depth cloud
+  field, mid-ground billboards and monuments, a lit turf edge with two rows of
+  swaying blades, and strata that scroll under the floor.
+- Light is faked with additive concentric discs rather than a screen-space bloom
+  pass, so the look is identical on desktop and in WebGL2 where the Compatibility
+  renderer has no glow.
+
+**Engineering**
+- Deterministic, hand-rolled collision and movement (no physics bodies), which
+  keeps the feel tunable and the build tiny.
+- `game.gd` owns the run; entities are plain `Node2D`s reporting to it.
+- A capture harness (`--shot=`, `--seq=`, `--spawn=`) so frames can be reviewed
+  headlessly without a compositor.
+
+**Web export notes**
+- Built for the Compatibility renderer on purpose: Forward+ does not exist in
+  WebGL2.
+- `variant/thread_support=false`, because the threaded build needs COOP/COEP
+  headers (`SharedArrayBuffer`) and GitHub Pages cannot send them.
+
+
+## Controls (Godot edition)
+
+| Input | Action |
+| --- | --- |
+| `A` / `D`, arrows | move (you auto-run; this steers and brakes) |
+| `SPACE` / `W` | jump, then double jump |
+| `SHIFT` | dash (brief invulnerability) |
+| `J` / `F` / left click | shoot (auto-aims at the nearest threat) |
+| `ESC` / `P` | pause |
+| `1`-`4` in the menu | pick a mode |
+| `ENTER` | start / restart |
+
+## Previous: the three.js edition
+
+Everything below describes `legacy/threejs.html` and the `src/` sources. It is kept
+for reference; the Godot build above is the shipping game.
 
 ## Modes
 
