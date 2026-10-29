@@ -67,6 +67,7 @@ var shake_amt := 0.0
 var hitstop_until := 0
 var autoplay := false
 var hold_creatures := false   # review harness: freeze the cast for a photo
+var _fps_t := 0.0
 var _death_shot := false
 
 const DEATH_LINES := [
@@ -261,6 +262,15 @@ func _process(delta: float) -> void:
 		Engine.time_scale = 1.0
 
 	_update_camera(delta)
+	_update_quality(delta)
+
+	# expose the frame rate to the page on web builds, so it can be measured
+	# from outside instead of guessed at
+	if OS.has_feature("web"):
+		_fps_t += delta
+		if _fps_t > 0.5:
+			_fps_t = 0.0
+			JavaScriptBridge.eval("window.__mrFps=%f;" % Engine.get_frames_per_second(), true)
 
 	if state == ST_MENU:
 		world.scroll += 40.0 * delta
@@ -530,6 +540,48 @@ func say_death_at(pos: Vector2) -> void:
 	if speech != null:
 		speech.emit_at(pos, BARKS["death"][randi() % BARKS["death"].size()])
 
+# ------------------------------------------------------------- quality ------
+## Adaptive quality. The web build is single-threaded, so a modest laptop can be
+## fill-rate bound by a full-screen shader. Rather than ship one setting that is
+## wrong for half the audience, watch the real frame rate and shed work in a
+## fixed order: decoration first, then the shader's per-pixel detail, then the
+## die-cut sticker edges. Gameplay never changes.
+
+var quality := 2
+var _q_frames := 0
+var _q_time := 0.0
+var _q_cooldown := 3.0
+
+func _update_quality(delta: float) -> void:
+	if OS.get_cmdline_user_args().has("--noautoq"):
+		return
+	_q_cooldown = maxf(0.0, _q_cooldown - delta)
+	_q_time += delta
+	_q_frames += 1
+	if _q_time < 1.5:
+		return
+	var fps := float(_q_frames) / _q_time
+	_q_time = 0.0
+	_q_frames = 0
+	if _q_cooldown > 0.0:
+		return
+	if fps < 42.0 and quality > 0:
+		_set_quality(quality - 1)
+		_q_cooldown = 3.0
+	elif fps > 58.0 and quality < 2:
+		_set_quality(quality + 1)
+		_q_cooldown = 8.0
+
+func _set_quality(q: int) -> void:
+	quality = q
+	if world != null:
+		world.detail = q
+	# The die-cut edge is a polyline, not fill, so it stays at every level — it is
+	# the thing that makes the cast read, and dropping it saves almost nothing.
+	Toy.sticker_enabled = true
+	if fx != null:
+		fx.max_parts = [70, 120, 190][clampi(q, 0, 2)]
+
 # --------------------------------------------------------------------- feel ---
 
 func shake(amount: float) -> void:
@@ -654,6 +706,8 @@ func _handle_cli() -> void:
 			_capture_run(a.substr(6), 6)
 		elif a.begins_with("--mode="):
 			start_run(a.substr(7))
+		elif a.begins_with("--bench="):
+			_bench(float(a.substr(8)))
 		elif a == "--hold":
 			hold_creatures = true
 		elif a == "--die":
@@ -664,6 +718,23 @@ func _handle_cli() -> void:
 			_spawn_boss()
 		elif a.begins_with("--spawn="):
 			_spawn_lineup(a.substr(8))
+
+## Frame-time benchmark: run a busy scene and report draw calls and FPS.
+func _bench(seconds: float) -> void:
+	start_run(mode)
+	for i in 14:
+		spawn_enemy(["shibe", "frog", "wojak", "chad", "candle", "bonk", "rug", "rekt"][i % 8],
+			Vector2(200.0 + i * 70.0, ground_y - 30.0))
+	for i in 40:
+		emit_fx("coin", Vector2(200.0 + i * 22.0, ground_y - 120.0))
+	await get_tree().create_timer(seconds).timeout
+	print("BENCH fps=", Engine.get_frames_per_second(),
+		" draw_calls=", Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+		" objects=", Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
+		" prims=", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+		" proc_ms=", snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01),
+		" phys_ms=", snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01))
+	get_tree().quit()
 
 ## Put one of every archetype on screen, for reviewing the cast.
 func _spawn_lineup(list: String) -> void:

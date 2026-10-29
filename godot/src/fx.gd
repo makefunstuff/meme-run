@@ -7,7 +7,7 @@ extends Node2D
 
 const Toy = preload("res://src/toy.gd")
 
-const MAX_PARTS := 420
+var max_parts := 190
 
 var parts: Array = []
 var texts: Array = []
@@ -16,7 +16,7 @@ var rings: Array = []
 func burst(pos: Vector2, count: int, colour: Color, speed: float = 260.0, size: float = 4.0,
 		life: float = 0.6, gravity: float = 900.0, spread: float = TAU, dir: float = 0.0) -> void:
 	for i in count:
-		if parts.size() >= MAX_PARTS:
+		if parts.size() >= max_parts:
 			break
 		var a := dir + randf_range(-spread * 0.5, spread * 0.5)
 		var sp := speed * randf_range(0.35, 1.0)
@@ -71,14 +71,12 @@ func _draw() -> void:
 			continue
 		# squares read as debris, circles as sparks: mixing both stops bursts
 		# from looking like one uniform puff
+		var col := Color(c.r, c.g, c.b, a)
 		if int(p["spin"] * 10.0) % 3 == 0:
-			draw_circle(p["pos"], sz, Color(c.r, c.g, c.b, a), true, -1.0, true)
+			# a rect is one command with four vertices; a circle is triangulated
+			draw_rect(Rect2(p["pos"] - Vector2(sz, sz), Vector2(sz, sz) * 2.0), col)
 		else:
-			var pts := PackedVector2Array()
-			for i in 4:
-				var ang: float = p["rot"] + TAU * float(i) / 4.0 + PI * 0.25
-				pts.append(p["pos"] + Vector2(cos(ang), sin(ang)) * sz * 1.3)
-			draw_colored_polygon(pts, Color(c.r, c.g, c.b, a))
+			draw_rect(Rect2(p["pos"] - Vector2(sz, sz * 0.62), Vector2(sz, sz * 1.24) * 2.0), col)
 
 	for x in texts:
 		var a2: float = clampf(x["life"] / x["max"], 0.0, 1.0)

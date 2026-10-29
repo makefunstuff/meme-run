@@ -324,7 +324,7 @@ func _paint(ci: CanvasItem) -> void:
 	for i in trail.size():
 		var t2 := float(i) / float(max(1, trail.size()))
 		var p := self.to_local(trail[i])
-		ci.draw_circle(p, RADIUS * (0.5 + t2 * 0.5), Color(1.0, 0.45, 0.55, 0.10 + t2 * 0.12), true, -1.0, true)
+		Toy.disc(ci, p, RADIUS * (0.5 + t2 * 0.5), Color(1.0, 0.45, 0.55, 0.10 + t2 * 0.12))
 
 	if dead:
 		_draw_dead(ci, body_col)
@@ -336,11 +336,11 @@ func _paint(ci: CanvasItem) -> void:
 
 	# drawn at 1.3x: the collision radius stays honest, so this is purely a
 	# reading-size decision — the character was under 8% of screen height
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.3, 1.3))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.42, 1.42))
 
 	# contact shadow: without it the character floats above the floor
 	var air := clampf(1.0 - (ground_y_offset()) / 260.0, 0.35, 1.0)
-	ci.draw_circle(Vector2(0, 22), 17.0 * air, Color(0.1, 0.05, 0.12, 0.22 * air), true, -1.0, true)
+	Toy.disc(ci, Vector2(0, 22), 17.0 * air, Color(0.1, 0.05, 0.12, 0.22 * air))
 
 	# ---- legs: two capsules that scissor with the run phase
 	var leg_swing := sin(run_phase) * (10.0 if grounded else 4.0)
@@ -372,7 +372,7 @@ func _paint(ci: CanvasItem) -> void:
 	# ---- head: big, offset toward the aim, with a hood
 	var head_c := Vector2(2.0 * facing, -30.0) + aim * 2.0
 	# hood first: drawn after the skull it just paints over the face
-	ci.draw_circle(head_c + Vector2(0, -3), 17.0, Color(Toy.PINK_D, a), true, -1.0, true)
+	Toy.disc(ci, head_c + Vector2(0, -3), 17.0, Color(Toy.PINK_D, a))
 	ci.draw_circle(head_c + Vector2(0, -3), 17.0, Color(Toy.INK, a), false, 2.0, true)
 	Toy.blob(ci, head_c, 14.5, Color(Toy.SKIN, a), 2.4, 24)
 	# fringe, on top of the skin, kept above the eyes
@@ -391,7 +391,7 @@ func _paint(ci: CanvasItem) -> void:
 	var shoulder := Vector2(6, -10)
 	var arm_end := shoulder + aim * 16.0
 	ci.draw_line(shoulder, arm_end, Color(Toy.PINK_D, a), 8.0, true)
-	ci.draw_circle(arm_end, 4.6, Color(Toy.SKIN, a), true, -1.0, true)
+	Toy.disc(ci, arm_end, 4.6, Color(Toy.SKIN, a))
 	_draw_gun(ci, arm_end, a)
 
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
@@ -404,7 +404,7 @@ func _paint(ci: CanvasItem) -> void:
 
 	# shells
 	for s in shells:
-		ci.draw_circle(self.to_local(s["pos"]), 1.8, Color(Toy.GOLD_D, clampf(s["life"], 0.0, 1.0)), true, -1.0, true)
+		Toy.disc(ci, self.to_local(s["pos"]), 1.8, Color(Toy.GOLD_D, clampf(s["life"], 0.0, 1.0)))
 
 func ground_y_offset() -> float:
 	# how far the player is above the floor, for the shadow
@@ -441,7 +441,7 @@ func _draw_gun(ci: CanvasItem, at: Vector2, a: float) -> void:
 	ci.draw_line(base, base + perp * 12.0 - dir * 2.0, Toy.INK, 12.0, true)
 	ci.draw_line(base, base + perp * 12.0 - dir * 2.0, Color("#2f2a3a"), 8.5, true)
 	# muzzle glow ring
-	ci.draw_circle(p1, 5.4, Color(col, a), true, -1.0, true)
+	Toy.disc(ci, p1, 5.4, Color(col, a))
 	ci.draw_circle(p1, 5.4, Toy.INK, false, 1.6, true)
 	Toy.glow(ci, p1, 14.0, col, 0.4)
 
@@ -451,7 +451,7 @@ func _draw_dead(ci: CanvasItem, col: Color) -> void:
 	var spin := death_t * 6.0
 	ci.draw_set_transform(Vector2.ZERO, spin, Vector2(1, 1))
 	Toy.body(ci, Rect2(-14, -14, 28, 28), 8.0, col, 2.4)
-	ci.draw_circle(Vector2(0, -8), 12.0, Toy.SKIN, true, -1.0, true)
+	Toy.disc(ci, Vector2(0, -8), 12.0, Toy.SKIN)
 	for s in [-1.0, 1.0]:
 		ci.draw_line(Vector2(s * 5 - 3, -10), Vector2(s * 5 + 3, -6), Toy.INK, 2.0, true)
 		ci.draw_line(Vector2(s * 5 - 3, -6), Vector2(s * 5 + 3, -10), Toy.INK, 2.0, true)

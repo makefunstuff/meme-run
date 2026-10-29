@@ -432,10 +432,21 @@ func _draw_pause(vp: Vector2) -> void:
 	Toy.text(self, Vector2(vp.x * 0.5, card.position.y + 84), "ESC to resume", 12,
 		Color(0.7, 0.76, 0.88), HORIZONTAL_ALIGNMENT_CENTER)
 
+var _fmt_cache := {}
+var _fmt_last := 0.0
+var _fmt_str := "0"
+
 func _fmt(v: float) -> String:
+	if absf(v - _fmt_last) < 0.5:
+		return _fmt_str
+	_fmt_last = v
+	_fmt_str = _fmt_uncached(v)
+	return _fmt_str
+
+func _fmt_uncached(v: float) -> String:
 	var s := str(int(round(v)))
 	if s.begins_with("-"):
-		return "-" + _fmt(float(s.substr(1)))
+		return "-" + _fmt_uncached(float(s.substr(1)))
 	var out := ""
 	var count := 0
 	for i in range(s.length() - 1, -1, -1):

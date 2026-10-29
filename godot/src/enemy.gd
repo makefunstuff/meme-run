@@ -223,11 +223,17 @@ func redraw() -> void:
 		sticker.set_aberration(hit_flash * 2.5)
 
 func _paint(ci: CanvasItem) -> void:
+	# off-screen entities cost nothing: no shapes, no sticker, no label
+	if game != null and game.player != null:
+		var dx: float = global_position.x - game.player.global_position.x
+		if dx < -260.0 or dx > 1500.0:
+			Toy.sticker = false
+			return
 	Toy.sticker = true
 	Toy.sticker_pad = 3.0
 	var pop := 0.62 + 0.38 * spawn_t
-	ci.draw_circle(Vector2(0, radius * 0.95), radius * 0.85, Color(0.1, 0.05, 0.12, 0.26), true, -1.0, true)
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2((2.0 - pop) * 1.18, pop * 1.18))
+	Toy.disc(ci, Vector2(0, radius * 0.95), radius * 0.85, Color(0.1, 0.05, 0.12, 0.26))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2((2.0 - pop) * 1.34, pop * 1.34))
 
 	var tint := Color(1, 1, 1, 1)
 	var body: Color = data["body"]
@@ -277,10 +283,10 @@ func _eyes(ci: CanvasItem, c: Vector2, r: float, dx: float, look: float = 0.3, p
 		if open < 0.3:
 			ci.draw_line(p + Vector2(-r * 0.8, 0), p + Vector2(r * 0.8, 0), Toy.INK, maxf(1.4, r * 0.3), true)
 		else:
-			ci.draw_circle(p, r, Color("#fffaf9"), true, -1.0, true)
+			Toy.disc(ci, p, r, Color("#fffaf9"))
 			ci.draw_circle(p, r, Toy.INK, false, maxf(1.0, r * 0.16), true)
-			ci.draw_circle(p + Vector2(facing * look * r, 0.0), r * 0.58, pupil, true, -1.0, true)
-			ci.draw_circle(p + Vector2(-r * 0.28, -r * 0.3), r * 0.2, Color("#ffffff"), true, -1.0, true)
+			Toy.disc(ci, p + Vector2(facing * look * r, 0.0), r * 0.58, pupil)
+			Toy.disc(ci, p + Vector2(-r * 0.28, -r * 0.3), r * 0.2, Color("#ffffff"))
 
 ## SHIBE — the dog. Pointy ears, snout, black nose, permanent side-eye.
 func _draw_shibe(ci: CanvasItem, body: Color) -> void:
@@ -322,10 +328,10 @@ func _draw_frog(ci: CanvasItem, body: Color) -> void:
 	# eye domes on top
 	for s in [-1.0, 1.0]:
 		var dome := Vector2(s * r * 0.48, -r * 0.6)
-		ci.draw_circle(dome, r * 0.42, body, true, -1.0, true)
+		Toy.disc(ci, dome, r * 0.42, body)
 		ci.draw_circle(dome, r * 0.42, Toy.INK, false, 2.0, true)
-		ci.draw_circle(dome, r * 0.26, Color("#fffaf9"), true, -1.0, true)
-		ci.draw_circle(dome + Vector2(facing * r * 0.08, 0), r * 0.14, Toy.INK, true, -1.0, true)
+		Toy.disc(ci, dome, r * 0.26, Color("#fffaf9"))
+		Toy.disc(ci, dome + Vector2(facing * r * 0.08, 0), r * 0.14, Toy.INK)
 	# wide grin
 	ci.draw_arc(Vector2(0, r * 0.05), r * 0.72, 0.35, PI - 0.35, 16, Toy.INK, 2.2, true)
 
@@ -363,7 +369,7 @@ func _draw_chad(ci: CanvasItem, body: Color) -> void:
 	Toy.shape(ci, jaw, body, Toy.INK, 2.4)
 	# ears
 	for s2 in [-1.0, 1.0]:
-		ci.draw_circle(Vector2(s2 * r * 0.6, -r * 0.1), r * 0.13, body.darkened(0.1), true, -1.0, true)
+		Toy.disc(ci, Vector2(s2 * r * 0.6, -r * 0.1), r * 0.13, body.darkened(0.1))
 		ci.draw_circle(Vector2(s2 * r * 0.6, -r * 0.1), r * 0.13, Toy.INK, false, 1.4, true)
 	# heavy brow
 	ci.draw_rect(Rect2(-r * 0.42, -r * 0.66, r * 0.84, r * 0.14), body.darkened(0.2))
@@ -409,10 +415,10 @@ func _draw_bonk(ci: CanvasItem, body: Color) -> void:
 	var bat_tip := bat_base + Vector2(facing * cos(swing), sin(swing)) * r * 1.5
 	ci.draw_line(bat_base, bat_tip, Toy.INK, r * 0.34, true)
 	ci.draw_line(bat_base, bat_tip, Color("#c98c5a"), r * 0.22, true)
-	ci.draw_circle(bat_tip, r * 0.2, Color("#a9713f"), true, -1.0, true)
+	Toy.disc(ci, bat_tip, r * 0.2, Color("#a9713f"))
 	ci.draw_circle(bat_tip, r * 0.2, Toy.INK, false, 1.6, true)
 	# coin
-	ci.draw_circle(Vector2.ZERO, r, body, true, -1.0, true)
+	Toy.disc(ci, Vector2.ZERO, r, body)
 	ci.draw_circle(Vector2.ZERO, r, Toy.INK, false, 2.6, true)
 	ci.draw_arc(Vector2.ZERO, r * 0.78, 0, TAU, 22, body.darkened(0.25), 2.0, true)
 	_eyes(ci, Vector2(0, -r * 0.12), r * 0.22, r * 0.34, 0.25)
@@ -460,9 +466,9 @@ func _draw_rocket(ci: CanvasItem, body: Color) -> void:
 		Vector2(-r * 0.75, -r * 0.5), Vector2(-r * 0.75, r * 0.5), Vector2(-r * 1.28, 0)])
 	Toy.shape(ci, nose, Color("#e0556a"), Toy.INK, 2.2)
 	# porthole + eye
-	ci.draw_circle(Vector2(-r * 0.22, 0), r * 0.26, Color("#bfe9ff"), true, -1.0, true)
+	Toy.disc(ci, Vector2(-r * 0.22, 0), r * 0.26, Color("#bfe9ff"))
 	ci.draw_circle(Vector2(-r * 0.22, 0), r * 0.26, Toy.INK, false, 2.0, true)
-	ci.draw_circle(Vector2(-r * 0.28, 0), r * 0.11, Toy.INK, true, -1.0, true)
+	Toy.disc(ci, Vector2(-r * 0.28, 0), r * 0.11, Toy.INK)
 
 ## REKT — a skull that hangs about and shoots.
 func _draw_rekt(ci: CanvasItem, body: Color) -> void:
@@ -477,8 +483,8 @@ func _draw_rekt(ci: CanvasItem, body: Color) -> void:
 		body.darkened(0.08), Toy.INK, 2.0)
 	# sockets
 	for s in [-1.0, 1.0]:
-		ci.draw_circle(Vector2(s * r * 0.34, -r * 0.18), r * 0.3, Toy.INK, true, -1.0, true)
-		ci.draw_circle(Vector2(s * r * 0.34 + facing * r * 0.05, -r * 0.18), r * 0.12, Color("#ff5d73"), true, -1.0, true)
+		Toy.disc(ci, Vector2(s * r * 0.34, -r * 0.18), r * 0.3, Toy.INK)
+		Toy.disc(ci, Vector2(s * r * 0.34 + facing * r * 0.05, -r * 0.18), r * 0.12, Color("#ff5d73"))
 	# nose + teeth
 	ci.draw_colored_polygon(PackedVector2Array([
 		Vector2(0, r * 0.1), Vector2(-r * 0.12, r * 0.34), Vector2(r * 0.12, r * 0.34)]), Toy.INK)
@@ -494,7 +500,7 @@ func _draw_npc(ci: CanvasItem, body: Color) -> void:
 	Toy.shape(ci, Toy.round_rect(Rect2(-r * 0.42, -r * 0.95, r * 0.84, r * 0.95), r * 0.36), body, Toy.INK, 2.2)
 	# blank eyes: just two dark dots, no glints
 	for s in [-1.0, 1.0]:
-		ci.draw_circle(Vector2(s * r * 0.2, -r * 0.55), r * 0.1, Toy.INK, true, -1.0, true)
+		Toy.disc(ci, Vector2(s * r * 0.2, -r * 0.55), r * 0.1, Toy.INK)
 	ci.draw_line(Vector2(-r * 0.14, -r * 0.25), Vector2(r * 0.14, -r * 0.25), Toy.INK, 1.8, true)
 	# the question mark it is always asking
 	var q := "?"

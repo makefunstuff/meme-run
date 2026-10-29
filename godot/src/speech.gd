@@ -31,8 +31,14 @@ func emit_at(pos: Vector2, text: String, opts: Dictionary = {}) -> void:
 	while items.size() >= MAX_LIVE:
 		items.pop_front()
 	var dur: float = float(opts.get("duration", 1.7))
+	var lines2 := _wrap(text, 12, MAX_W)
+	var wid2 := 0.0
+	for ln2 in lines2:
+		wid2 = maxf(wid2, ThemeDB.fallback_font.get_string_size(ln2, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x)
 	items.append({
 		"who": null,
+		"lines": lines2,
+		"w": wid2 + PAD * 2.0,
 		"pos": pos,
 		"text": text,
 		"life": dur,
@@ -54,8 +60,14 @@ func say(who: Node2D, text: String, opts: Dictionary = {}) -> bool:
 	while items.size() >= MAX_LIVE:
 		items.pop_front()
 	var dur: float = float(opts.get("duration", 1.9))
+	var lines := _wrap(text, 12, MAX_W)
+	var wid := 0.0
+	for ln in lines:
+		wid = maxf(wid, ThemeDB.fallback_font.get_string_size(ln, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x)
 	items.append({
 		"who": who,
+		"lines": lines,
+		"w": wid + PAD * 2.0,
 		"pos": Vector2.ZERO,
 		"text": text,
 		"life": dur,
@@ -87,12 +99,9 @@ func _draw() -> void:
 		if a <= 0.01:
 			continue
 
-		var lines := _wrap(it["text"], 12, MAX_W)
+		var lines: Array = it["lines"]
 		var lh := 15.0
-		var w := 0.0
-		for ln in lines:
-			w = maxf(w, ThemeDB.fallback_font.get_string_size(ln, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x)
-		w += PAD * 2.0
+		var w: float = it["w"]
 		var h := float(lines.size()) * lh + PAD * 1.6
 
 		var anchor: Vector2 = to_local(anchor_pos + Vector2(0, it["offset"]))

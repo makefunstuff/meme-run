@@ -58,78 +58,72 @@ const PALETTES := {
 }
 
 var pal: Dictionary
+var detail := 2          # 2 high, 1 mid, 0 low — set by the quality governor
+var sky_rect: ColorRect = null
+var sky_mat: ShaderMaterial = null
+
+const SKY_SHADER := preload("res://src/sky.gdshader")
 
 func _ready() -> void:
 	pal = PALETTES["classic"]
+	# One draw call for the entire background: gradient, halftone, scanlines,
+	# horizon glow and vignette all live in the fragment shader.
+	sky_rect = ColorRect.new()
+	sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# a child draws AFTER its parent's own _draw(), so without this the sky
+	# paints over the posts, stickers, rail and timeline
+	sky_rect.show_behind_parent = true
+	sky_mat = ShaderMaterial.new()
+	sky_mat.shader = SKY_SHADER
+	sky_rect.material = sky_mat
+	add_child(sky_rect)
+	_apply_palette()
 
 func set_mode(m: String) -> void:
 	mode = m
 	pal = PALETTES.get(m, PALETTES["classic"])
+	_apply_palette()
 	queue_redraw()
+
+func _apply_palette() -> void:
+	if sky_mat == null:
+		return
+	var stops: Array = pal["sky"]
+	sky_mat.set_shader_parameter("c0", stops[0])
+	sky_mat.set_shader_parameter("c1", stops[1])
+	sky_mat.set_shader_parameter("c2", stops[2])
+	sky_mat.set_shader_parameter("c3", stops[3])
+	sky_mat.set_shader_parameter("c4", stops[4])
+	sky_mat.set_shader_parameter("glow_col", pal["glow"])
 
 func _process(delta: float) -> void:
 	t += delta
 	view = get_viewport().get_visible_rect().size
 	ground_y = view.y * 0.8
+	if sky_rect != null:
+		sky_rect.size = Vector2(view.x, ground_y + 40.0)
+		sky_rect.position = Vector2.ZERO
+	if sky_mat != null:
+		sky_mat.set_shader_parameter("view_size", Vector2(view.x, ground_y + 40.0))
+		sky_mat.set_shader_parameter("horizon", (ground_y) / (ground_y + 40.0))
+		sky_mat.set_shader_parameter("time", t)
+		sky_mat.set_shader_parameter("detail", 1.0 if detail >= 2 else 0.0)
 	queue_redraw()
 
 func _draw() -> void:
 	Toy.sticker = false
 	if pal.is_empty():
 		return
-	_draw_sky()
-	_draw_posts()
-	_draw_stickers()
+	if detail >= 1:
+		_draw_posts()
+	if detail >= 2:
+		_draw_stickers()
+		_draw_comments()
 	_draw_timeline()
-	_draw_rail()
+	if detail >= 1:
+		_draw_rail()
 
 # -------------------------------------------------------------------- sky ---
-
-func _draw_sky() -> void:
-	var w := view.x
-	var h := ground_y + 30.0
-	var stops: Array = pal["sky"]
-	var bands := 40
-	for i in bands:
-		var f0 := float(i) / float(bands)
-		var f1 := float(i + 1) / float(bands)
-		var quad := PackedVector2Array([Vector2(0, f0 * h), Vector2(w, f0 * h), Vector2(w, f1 * h), Vector2(0, f1 * h)])
-		var c := _sky_at(f0)
-		var c2 := _sky_at(f1)
-		draw_polygon(quad, PackedColorArray([c, c, c2, c2]))
-
-	# halftone: the texture of a printed poster, and it hides banding
-	var dot_step := 14.0
-	var dy := 0.0
-	while dy < h:
-		var dx := fposmod(dy * 1.7, dot_step)
-		while dx < w:
-			draw_circle(Vector2(dx, dy), 1.6, Color(1, 1, 1, 0.035), true, -1.0, true)
-			dx += dot_step
-		dy += dot_step
-
-	# scanlines, drifting with the feed
-	var sy := fposmod(t * 14.0, 6.0)
-	while sy < h:
-		draw_rect(Rect2(0, sy, w, 1.5), Color(0, 0, 0, 0.09))
-		sy += 6.0
-
-	# horizon glow where the timeline meets the dark
-	var gl: Color = pal["glow"]
-	for i in 8:
-		var a := 0.07 * (1.0 - float(i) / 8.0)
-		draw_rect(Rect2(0, ground_y - 8.0 - float(i) * 12.0, w, 20.0), Color(gl.r, gl.g, gl.b, a))
-
-	_draw_live_badge()
-
-func _sky_at(f: float) -> Color:
-	var stops: Array = pal["sky"]
-	var n := stops.size() - 1
-	var x := clampf(f, 0.0, 1.0) * n
-	var i := int(floor(x))
-	if i >= n:
-		return stops[n]
-	return (stops[i] as Color).lerp(stops[i + 1], x - float(i))
 
 ## The app chrome, top right: a LIVE pill and a viewer count that ticks.
 func _draw_live_badge() -> void:
@@ -211,6 +205,28 @@ func _draw_stickers() -> void:
 				draw_arc(Vector2.ZERO, 12.0, -0.6, 1.2, 12, Color(0.02, 0.1, 0.16, a), 3.0, true)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
 
+## Comment bubbles drifting through the feed. Cheap, and they do more for the
+## "you are inside an app" read than any amount of parallax scenery.
+const COMMENTS := ["this is fine", "ratio", "gm", "wagmi", "who else is early",
+	"not financial advice", "i am literally shaking", "wen moon", "down 99%",
+	"my bag", "first", "this changed my life"]
+
+func _draw_comments() -> void:
+	var font: Font = ThemeDB.fallback_font
+	var factor := 0.22
+	var spacing := 560.0
+	var period := view.x + 700.0
+	for i in 5:
+		var seed := float(i) * 83.7
+		var x := fposmod(seed * 17.0 - scroll * factor, period) - 350.0
+		var y := ground_y - 210.0 - fposmod(seed * 0.37, 1.0) * 190.0 + sin(t * 0.5 + seed) * 6.0
+		var text: String = COMMENTS[(int(abs(seed)) + i * 3) % COMMENTS.size()]
+		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		var box := Rect2(x, y, tw + 34.0, 22.0)
+		Toy.shape(self, Toy.round_rect(box, 11.0), Color(0.08, 0.05, 0.12, 0.55), Color(1, 1, 1, 0.10), 1.0)
+		Toy.disc(self, Vector2(box.position.x + 12, box.position.y + 11), 5.0, Color(pal["cyan"], 0.75))
+		Toy.text(self, Vector2(box.position.x + 22, box.position.y + 15), text, 10, Color(1, 1, 1, 0.62))
+
 func _draw_flame(c: Vector2, r: float, col: Color) -> void:
 	var pts := PackedVector2Array([
 		c + Vector2(0, -r * 1.4), c + Vector2(r * 0.55, -r * 0.25),
@@ -244,7 +260,7 @@ func _draw_timeline() -> void:
 	draw_rect(Rect2(0, track_top + track_h + 3.0, w, 2.0), Color(0, 0, 0, 0.5))
 
 	# tick marks, scrolling with the world
-	var step := 26.0
+	var step := 38.0
 	var x0 := -fposmod(scroll * 1.0, step)
 	var x := x0
 	while x < w + step:
@@ -254,7 +270,7 @@ func _draw_timeline() -> void:
 		x += step
 
 	# candlesticks riding the track
-	var cstep := 34.0
+	var cstep := 52.0
 	var cx := -fposmod(scroll * 1.0, cstep)
 	while cx < w + cstep:
 		var seed := floorf((cx + scroll) / cstep)
@@ -316,7 +332,23 @@ const TICKER := [["PEPE", 12.4], ["MOON", 411.0], ["RUG", -99.9], ["SHIB", 6.9],
 	["WAGMI", 88.0], ["CHAD", 100.0], ["BONK", 250.3], ["REKT", -96.3], ["BAG", 4.2],
 	["SUS", -69.0], ["OHIO", -99.9]]
 
+var _ticker_measured := false
+var _ticker_w: Array = []
+
+func _measure_ticker() -> void:
+	if _ticker_measured:
+		return
+	_ticker_measured = true
+	var font: Font = ThemeDB.fallback_font
+	for item in TICKER:
+		var label := "$" + String(item[0])
+		var pct := "%+.1f%%" % float(item[1])
+		_ticker_w.append([
+			font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x,
+			font.get_string_size(pct, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x])
+
 func _draw_ticker(baseline: float) -> void:
+	_measure_ticker()
 	var font: Font = ThemeDB.fallback_font
 	var mint: Color = pal["mint"]
 	var pink: Color = pal["pink"]
@@ -330,9 +362,9 @@ func _draw_ticker(baseline: float) -> void:
 		var label := "$" + String(item[0])
 		var pct := ("%+.1f%%" % float(item[1]))
 		Toy.text(self, Vector2(x, baseline), label, 10, Color(1, 1, 1, 0.55))
-		var lw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		var lw: float = _ticker_w[i % _ticker_w.size()][0]
 		Toy.text(self, Vector2(x + lw + 5, baseline), pct, 10, col)
-		var pw := font.get_string_size(pct, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		var pw: float = _ticker_w[i % _ticker_w.size()][1]
 		draw_circle(Vector2(x + lw + pw + 16, baseline - 3.5), 1.6, Color(gold, 0.6), true, -1.0, true)
 		x += lw + pw + 44.0
 		i += 1

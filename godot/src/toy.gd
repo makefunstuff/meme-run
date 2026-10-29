@@ -44,6 +44,7 @@ static var _arc_cache: Dictionary = {}
 ## makes a character read as a die-cut sticker against a busy background. Toggled
 ## around character drawing only, so the world keeps its own line weights.
 static var sticker := false
+static var sticker_enabled := true
 static var sticker_colour := Color("#fffdff")
 static var sticker_pad := 4.0
 
@@ -75,7 +76,7 @@ static func circle(centre: Vector2, r: float, seg: int = 20) -> PackedVector2Arr
 
 ## Rounded rectangle, corners only — a squircle reads more like moulded plastic
 ## than a true arc does at these sizes.
-static func round_rect(rect: Rect2, radius: float, seg: int = 6) -> PackedVector2Array:
+static func round_rect(rect: Rect2, radius: float, seg: int = 4) -> PackedVector2Array:
 	var r: float = min(radius, min(rect.size.x, rect.size.y) * 0.5)
 	var pts := PackedVector2Array()
 	var corners := [
@@ -106,10 +107,20 @@ static func shape(ci: CanvasItem, pts: PackedVector2Array, fill: Color,
 	closed.append(pts[0])
 	if sticker and ink_width < 0.0:
 		pass
-	if sticker and ink_width >= 0.0:
-		ci.draw_polyline(closed, sticker_colour, ink_width + sticker_pad * 2.0, true)
+	if sticker and sticker_enabled and ink_width >= 0.0:
+		# no antialiasing on the cut edge: it is 6-8px wide, the aliasing is
+		# invisible, and AA polylines generate extra geometry per segment
+		ci.draw_polyline(closed, sticker_colour, ink_width + sticker_pad * 2.0, false)
 	if ink_width > 0.0 and ink.a > 0.0:
 		ci.draw_polyline(closed, ink, ink_width, true)
+
+
+## Filled circle with a controlled segment count. Eyes, noses and dots do not
+## need 32 segments at 6-12px.
+static func disc(ci: CanvasItem, centre: Vector2, r: float, fill: Color, seg: int = 12) -> void:
+	if r <= 0.2:
+		return
+	ci.draw_colored_polygon(ellipse(centre, r, r, seg), fill)
 
 
 static func blob(ci: CanvasItem, centre: Vector2, r: float, fill: Color,
