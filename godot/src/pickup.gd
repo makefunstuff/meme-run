@@ -69,6 +69,8 @@ func _collect() -> void:
 	queue_free()
 
 func _draw() -> void:
+	Toy.sticker = true
+	Toy.sticker_pad = 2.5
 	var bob := sin(t * 3.0 + base_y) * 3.0
 	var glow_a := 0.5 + 0.2 * sin(t * 5.0)
 	Toy.glow(self, Vector2(0, bob), 26.0, glow_colour, glow_a * 0.8)
@@ -99,3 +101,4 @@ func _draw() -> void:
 			var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
 			Toy.text(self, Vector2(-tw * 0.5, bob + 6), label, 16, Toy.INK)
 			Toy.sparkle(self, Vector2(9, bob - 11), 5.0, Color(1, 1, 1, 0.9))
+	Toy.sticker = false

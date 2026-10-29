@@ -36,17 +36,26 @@ the old build feel clunky was structural.
 - Floating damage and P&L numbers, particle bursts per event rather than one
   generic puff.
 
-**Graphics**
-- No imported art at all: every character, prop and background element is drawn
-  from arcs, rounded rectangles and polygons (`godot/src/toy.gd`). That keeps the
-  download small, keeps shapes crisp at any resolution, and means one palette
-  change re-skins the game.
-- Three parallax ridge layers generated from summed sines, a two-depth cloud
-  field, mid-ground billboards and monuments, a lit turf edge with two rows of
-  swaying blades, and strata that scroll under the floor.
-- Light is faked with additive concentric discs rather than a screen-space bloom
-  pass, so the look is identical on desktop and in WebGL2 where the Compatibility
-  renderer has no glow.
+**Graphics — you are inside the feed**
+The first pass was pastel hills over a grass-and-dirt strip: the default
+platformer look, and it said nothing about the game. The world was rebuilt around
+the subject instead.
+
+- **The sky is a feed.** A saturated sunset gradient with a halftone dot screen,
+  drifting scanlines, a LIVE badge with a ticking viewer count, and rows of
+  distant post cards — photo block, caption bars and all — falling away into the
+  dark. The parallax layers are content, not scenery.
+- **The floor is a timeline.** The player runs along a scrubber: a mint "now"
+  line, tick marks, live candlesticks, a playhead, a price ticker underneath, and
+  the app panel below it with a tab bar and a scrub handle reading the run
+  percentage. A reaction rail (like/comment/share/coin with counts) hangs down
+  the right edge.
+- **The cast is die-cut stickers.** Every character and pickup gets a thick white
+  border under its ink outline, so it reads as a cut-out pasted onto the feed.
+  One flag in `toy.gd`, no shader.
+- No imported art at all: everything is drawn from arcs, rounded rectangles and
+  polygons (`godot/src/toy.gd`). Tiny download, crisp at any resolution, and one
+  palette table re-skins the game — which is how the four modes differ.
 
 **Engineering**
 - Deterministic, hand-rolled collision and movement (no physics bodies), which

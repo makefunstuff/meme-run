@@ -10,6 +10,8 @@ extends Node2D
 signal died
 
 const Toy = preload("res://src/toy.gd")
+const StickerScript = preload("res://src/sticker.gd")
+
 
 const RADIUS := 17.0
 const GRAVITY := 2450.0
@@ -67,10 +69,16 @@ var shells: Array = []         ## casing cosmetics
 
 var game: Node = null
 var ground_y := 560.0
+var sticker: Sticker = null
 
 func setup(g: Node, gy: float) -> void:
 	game = g
 	ground_y = gy
+	# the body is drawn by a skin inside a CanvasGroup so the die-cut sticker
+	# material can wrap it
+	sticker = StickerScript.new(_paint)
+	sticker.set_outline(0.0)
+	add_child(sticker)
 
 # ------------------------------------------------------------------ input ---
 
@@ -293,24 +301,34 @@ func _animate(delta: float) -> void:
 		s["vel"] += Vector2(0, 900.0) * delta
 		s["pos"] += s["vel"] * delta
 	shells = shells.filter(func(s): return s["life"] > 0.0)
-	queue_redraw()
+	redraw()
 
-func _draw() -> void:
+## Redraw the sticker-wrapped body. Kept as a method so call sites stay one
+## token and never disturb indentation.
+func redraw() -> void:
+	if sticker != null:
+		sticker.redraw()
+		sticker.set_aberration(hit_flash * 2.5)
+
+func _paint(ci: CanvasItem) -> void:
+	Toy.sticker = true
+	Toy.sticker_pad = 3.5
 	# everything below is drawn in local space (node sits at the player origin)
 	var flicker := invuln > 0.0 and fmod(invuln * 14.0, 2.0) < 1.0
 	var body_col := Toy.PINK
 	if hit_flash > 0.02:
 		body_col = body_col.lerp(Color.WHITE, hit_flash * 0.7)
 
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
 	# dash smear
 	for i in trail.size():
 		var t2 := float(i) / float(max(1, trail.size()))
-		var p := to_local(trail[i])
-		draw_circle(p, RADIUS * (0.5 + t2 * 0.5), Color(1.0, 0.45, 0.55, 0.10 + t2 * 0.12), true, -1.0, true)
+		var p := self.to_local(trail[i])
+		ci.draw_circle(p, RADIUS * (0.5 + t2 * 0.5), Color(1.0, 0.45, 0.55, 0.10 + t2 * 0.12), true, -1.0, true)
 
 	if dead:
-		_draw_dead(body_col)
+		_draw_dead(ci, body_col)
+		Toy.sticker = false
 		return
 
 	var a := 1.0 if not flicker else 0.45
@@ -318,11 +336,11 @@ func _draw() -> void:
 
 	# drawn at 1.3x: the collision radius stays honest, so this is purely a
 	# reading-size decision — the character was under 8% of screen height
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.3, 1.3))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.3, 1.3))
 
 	# contact shadow: without it the character floats above the floor
 	var air := clampf(1.0 - (ground_y_offset()) / 260.0, 0.35, 1.0)
-	draw_circle(Vector2(0, 22), 17.0 * air, Color(0.1, 0.05, 0.12, 0.22 * air), true, -1.0, true)
+	ci.draw_circle(Vector2(0, 22), 17.0 * air, Color(0.1, 0.05, 0.12, 0.22 * air), true, -1.0, true)
 
 	# ---- legs: two capsules that scissor with the run phase
 	var leg_swing := sin(run_phase) * (10.0 if grounded else 4.0)
@@ -332,61 +350,61 @@ func _draw() -> void:
 		var foot := hip + Vector2(sin(run_phase + float(i) * PI) * 10.0 + leg_swing * 0.2, 22.0)
 		if not grounded:
 			foot = hip + Vector2(s * 6.0 + 2.0, 16.0 - float(i) * 4.0)
-		draw_line(hip, foot, Color(Toy.DARK, a), 9.0, true)
-		draw_line(hip, foot, Color("#3f4a6b", a), 6.5, true)
+		ci.draw_line(hip, foot, Color(Toy.DARK, a), 9.0, true)
+		ci.draw_line(hip, foot, Color("#3f4a6b", a), 6.5, true)
 		# shoe
 		var shoe := Rect2(foot + Vector2(-7, -3), Vector2(15, 8))
-		Toy.body(self, shoe, 3.5, Color(Toy.GOLD, a), 1.8)
+		Toy.body(ci, shoe, 3.5, Color(Toy.GOLD, a), 1.8)
 
 	# ---- body
 	var body_rect := Rect2(-15, -20, 30, 30)
 	if dashing > 0.0:
 		body_rect = Rect2(-17, -19, 34, 26)
-	Toy.body(self, body_rect, 8.0, Color(body_col, a), 2.4)
+	Toy.body(ci, body_rect, 8.0, Color(body_col, a), 2.4)
 	# hem
-	draw_rect(Rect2(-13, 6, 26, 4), Color(Toy.PINK_D, a))
+	ci.draw_rect(Rect2(-13, 6, 26, 4), Color(Toy.PINK_D, a))
 	# pocket
-	Toy.body(self, Rect2(-8, 0, 16, 8), 3.0, Color(Toy.PINK_D, a), 1.4)
+	Toy.body(ci, Rect2(-8, 0, 16, 8), 3.0, Color(Toy.PINK_D, a), 1.4)
 
 	# ---- backpack, behind
-	Toy.body(self, Rect2(-24, -14, 12, 18), 4.5, Color(Toy.PINK_D, a), 2.0)
+	Toy.body(ci, Rect2(-24, -14, 12, 18), 4.5, Color(Toy.PINK_D, a), 2.0)
 
 	# ---- head: big, offset toward the aim, with a hood
 	var head_c := Vector2(2.0 * facing, -30.0) + aim * 2.0
 	# hood first: drawn after the skull it just paints over the face
-	draw_circle(head_c + Vector2(0, -3), 17.0, Color(Toy.PINK_D, a), true, -1.0, true)
-	draw_circle(head_c + Vector2(0, -3), 17.0, Color(Toy.INK, a), false, 2.0, true)
-	Toy.blob(self, head_c, 14.5, Color(Toy.SKIN, a), 2.4, 24)
+	ci.draw_circle(head_c + Vector2(0, -3), 17.0, Color(Toy.PINK_D, a), true, -1.0, true)
+	ci.draw_circle(head_c + Vector2(0, -3), 17.0, Color(Toy.INK, a), false, 2.0, true)
+	Toy.blob(ci, head_c, 14.5, Color(Toy.SKIN, a), 2.4, 24)
 	# fringe, on top of the skin, kept above the eyes
 	var fringe := PackedVector2Array([
 		head_c + Vector2(-13, -7), head_c + Vector2(-10, -14),
 		head_c + Vector2(0, -16), head_c + Vector2(10, -14),
 		head_c + Vector2(13, -6), head_c + Vector2(6, -10),
 		head_c + Vector2(-2, -8), head_c + Vector2(-8, -10)])
-	Toy.shape(self, fringe, Color("#743d4a", a), Color(Toy.INK, a), 1.4)
+	Toy.shape(ci, fringe, Color("#743d4a", a), Color(Toy.INK, a), 1.4)
 	# face
-	Toy.eye_pair(self, head_c + Vector2(1, 1), 4.6, 6.2, aim * 1.6)
-	Toy.blush(self, head_c + Vector2(0, 6), 2.6)
-	Toy.mouth(self, head_c + Vector2(1, 9), 9.0, 4.0, 0.7 if not dead else -0.2, Color("#8a3a4c", a))
+	Toy.eye_pair(ci, head_c + Vector2(1, 1), 4.6, 6.2, aim * 1.6)
+	Toy.blush(ci, head_c + Vector2(0, 6), 2.6)
+	Toy.mouth(ci, head_c + Vector2(1, 9), 9.0, 4.0, 0.7 if not dead else -0.2, Color("#8a3a4c", a))
 
 	# ---- near arm + gun, pointed along the aim
 	var shoulder := Vector2(6, -10)
 	var arm_end := shoulder + aim * 16.0
-	draw_line(shoulder, arm_end, Color(Toy.PINK_D, a), 8.0, true)
-	draw_circle(arm_end, 4.6, Color(Toy.SKIN, a), true, -1.0, true)
-	_draw_gun(arm_end, a)
+	ci.draw_line(shoulder, arm_end, Color(Toy.PINK_D, a), 8.0, true)
+	ci.draw_circle(arm_end, 4.6, Color(Toy.SKIN, a), true, -1.0, true)
+	_draw_gun(ci, arm_end, a)
 
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
 
 	# muzzle flash
 	if muzzle > 0.02:
 		var tip := arm_end + aim * 20.0
-		Toy.glow(self, tip, 18.0 * muzzle, Color(1.0, 0.95, 0.6), 0.6)
-		Toy.sparkle(self, tip, 8.0 * muzzle, Color(1, 0.98, 0.85, 0.9))
+		Toy.glow(ci, tip, 18.0 * muzzle, Color(1.0, 0.95, 0.6), 0.6)
+		Toy.sparkle(ci, tip, 8.0 * muzzle, Color(1, 0.98, 0.85, 0.9))
 
 	# shells
 	for s in shells:
-		draw_circle(to_local(s["pos"]), 1.8, Color(Toy.GOLD_D, clampf(s["life"], 0.0, 1.0)), true, -1.0, true)
+		ci.draw_circle(self.to_local(s["pos"]), 1.8, Color(Toy.GOLD_D, clampf(s["life"], 0.0, 1.0)), true, -1.0, true)
 
 func ground_y_offset() -> float:
 	# how far the player is above the floor, for the shadow
@@ -394,7 +412,7 @@ func ground_y_offset() -> float:
 		return 0.0
 	return maxf(0.0, game.ground_y - global_position.y - RADIUS)
 
-func _draw_gun(at: Vector2, a: float) -> void:
+func _draw_gun(ci: CanvasItem, at: Vector2, a: float) -> void:
 	var ang := aim.angle()
 	var w: Dictionary = WEAPONS.get(weapon, WEAPONS["blaster"])
 	var kick := recoil * 4.0
@@ -416,24 +434,25 @@ func _draw_gun(at: Vector2, a: float) -> void:
 	# body
 	var p0 := base - dir * 6.0
 	var p1 := base + dir * len
-	draw_line(p0, p1, Toy.INK, 15.0, true)
-	draw_line(p0, p1, Color("#5b6076"), 10.5, true)
-	draw_line(p0 + perp * 2.0, p1 + perp * 2.0, Color(1, 1, 1, 0.22), 2.4, true)
+	ci.draw_line(p0, p1, Toy.INK, 15.0, true)
+	ci.draw_line(p0, p1, Color("#5b6076"), 10.5, true)
+	ci.draw_line(p0 + perp * 2.0, p1 + perp * 2.0, Color(1, 1, 1, 0.22), 2.4, true)
 	# grip
-	draw_line(base, base + perp * 12.0 - dir * 2.0, Toy.INK, 12.0, true)
-	draw_line(base, base + perp * 12.0 - dir * 2.0, Color("#2f2a3a"), 8.5, true)
+	ci.draw_line(base, base + perp * 12.0 - dir * 2.0, Toy.INK, 12.0, true)
+	ci.draw_line(base, base + perp * 12.0 - dir * 2.0, Color("#2f2a3a"), 8.5, true)
 	# muzzle glow ring
-	draw_circle(p1, 5.4, Color(col, a), true, -1.0, true)
-	draw_circle(p1, 5.4, Toy.INK, false, 1.6, true)
-	Toy.glow(self, p1, 14.0, col, 0.4)
+	ci.draw_circle(p1, 5.4, Color(col, a), true, -1.0, true)
+	ci.draw_circle(p1, 5.4, Toy.INK, false, 1.6, true)
+	Toy.glow(ci, p1, 14.0, col, 0.4)
 
-func _draw_dead(col: Color) -> void:
+func _draw_dead(ci: CanvasItem, col: Color) -> void:
+	Toy.sticker = true
 	# a toy that has been switched off
 	var spin := death_t * 6.0
-	draw_set_transform(Vector2.ZERO, spin, Vector2(1, 1))
-	Toy.body(self, Rect2(-14, -14, 28, 28), 8.0, col, 2.4)
-	draw_circle(Vector2(0, -8), 12.0, Toy.SKIN, true, -1.0, true)
+	ci.draw_set_transform(Vector2.ZERO, spin, Vector2(1, 1))
+	Toy.body(ci, Rect2(-14, -14, 28, 28), 8.0, col, 2.4)
+	ci.draw_circle(Vector2(0, -8), 12.0, Toy.SKIN, true, -1.0, true)
 	for s in [-1.0, 1.0]:
-		draw_line(Vector2(s * 5 - 3, -10), Vector2(s * 5 + 3, -6), Toy.INK, 2.0, true)
-		draw_line(Vector2(s * 5 - 3, -6), Vector2(s * 5 + 3, -10), Toy.INK, 2.0, true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))
+		ci.draw_line(Vector2(s * 5 - 3, -10), Vector2(s * 5 + 3, -6), Toy.INK, 2.0, true)
+		ci.draw_line(Vector2(s * 5 - 3, -6), Vector2(s * 5 + 3, -10), Toy.INK, 2.0, true)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 1))

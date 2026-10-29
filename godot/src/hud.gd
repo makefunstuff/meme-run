@@ -122,6 +122,7 @@ func _heading(pos: Vector2, s: String, size: int, colour: Color) -> void:
 # -------------------------------------------------------------------- menu --
 
 func _draw() -> void:
+	Toy.sticker = false
 	click_rects.clear()
 	var vp := get_viewport_rect().size
 	match state:

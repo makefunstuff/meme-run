@@ -40,6 +40,13 @@ const GREY     := Color("#93a6c0")
 
 static var _arc_cache: Dictionary = {}
 
+## When true, every filled shape gets a white border under its ink outline, which
+## makes a character read as a die-cut sticker against a busy background. Toggled
+## around character drawing only, so the world keeps its own line weights.
+static var sticker := false
+static var sticker_colour := Color("#fffdff")
+static var sticker_pad := 4.0
+
 # ---------------------------------------------------------------- geometry --
 
 ## Points around an ellipse. Cached per (rx, ry, segments) because every hopper
@@ -95,9 +102,13 @@ static func shape(ci: CanvasItem, pts: PackedVector2Array, fill: Color,
 	if pts.size() < 3:
 		return
 	ci.draw_colored_polygon(pts, fill)
+	var closed := pts.duplicate()
+	closed.append(pts[0])
+	if sticker and ink_width < 0.0:
+		pass
+	if sticker and ink_width >= 0.0:
+		ci.draw_polyline(closed, sticker_colour, ink_width + sticker_pad * 2.0, true)
 	if ink_width > 0.0 and ink.a > 0.0:
-		var closed := pts.duplicate()
-		closed.append(pts[0])
 		ci.draw_polyline(closed, ink, ink_width, true)
 
 

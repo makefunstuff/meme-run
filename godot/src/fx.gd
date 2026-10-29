@@ -56,6 +56,7 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _draw() -> void:
+	Toy.sticker = false
 	for r in rings:
 		var f: float = 1.0 - r["life"] / r["max"]
 		var radius: float = lerpf(r["r0"], r["r1"], f)

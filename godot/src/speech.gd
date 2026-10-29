@@ -69,6 +69,7 @@ func say(who: Node2D, text: String, opts: Dictionary = {}) -> bool:
 
 ## Draw in world space: bubbles track their speaker as the camera moves.
 func _draw() -> void:
+	Toy.sticker = false
 	for it in items:
 		var who = it["who"]
 		var anchor_pos: Vector2
