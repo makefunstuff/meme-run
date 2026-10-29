@@ -31,7 +31,9 @@ let qualityPref = 'auto';
 let QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high', post: true, ss: 1.3, msaa: 4, bloom: true, grain: true };
 function applyQuality(lvl) {
   QUAL.lvl = lvl;
-  if (lvl === 'low') QUAL = { lab: false, vig: false, line: false, fg: false, sh: false, band: false, glitch: false, parts: 110, dpr: 1, lvl: 'low', post: false, ss: 1, msaa: 0, bloom: false, grain: false };
+  /* band stays on even at LOW: the land layers are ~30 quads, and turning them
+     off leaves an empty sky, which is a worse trade than any frame time saved */
+  if (lvl === 'low') QUAL = { lab: false, vig: false, line: false, fg: false, sh: false, band: true, glitch: false, parts: 110, dpr: 1, lvl: 'low', post: false, ss: 1, msaa: 0, bloom: false, grain: false };
   else if (lvl === 'mid') QUAL = { lab: true, vig: true, line: true, fg: false, sh: true, band: true, glitch: true, parts: 190, dpr: 1.25, lvl: 'mid', post: true, ss: 1, msaa: 4, bloom: true, grain: false };
   else QUAL = { lab: true, vig: true, line: true, fg: true, sh: true, band: true, glitch: true, parts: 260, dpr: 1.5, lvl: 'high', post: true, ss: 1.3, msaa: 4, bloom: true, grain: true };
   sizeCanvas();
