@@ -48,6 +48,7 @@ function perf(rawMs) {
 let last = performance.now();
 function frame(now) {
   const t0 = performance.now();
+  kitBeginAll();
   const rawMs = Math.min(Math.max(now - last, 1), 250);
   let dt = Math.min((now - last) / 1000, 1 / 30);
   last = now;
@@ -94,8 +95,10 @@ function frame(now) {
   drawRingsQ();
   drawFgLayer(bgT);
   drawOverlayFx(bgT);
+  drawGallery();
 
   for (const k of keys) { BATCH[k][0].end(); BATCH[k][1].end(); }
+  kitEndAll();
   renderer.render(scene, camera);
 
   syncBanner(); syncToast(); syncBossBar(); syncTape(dt);
@@ -126,10 +129,14 @@ window.MEMERUN = {
     lvl: QUAL.lvl, dpr: DPR, frameMs: +frameMs.toFixed(2), fpsWin: +fpsWin.toFixed(2),
     draws: renderer.info.render.calls, tris: renderer.info.render.triangles,
     geo: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
-    spr: Object.keys(SPR).length, canvas: cv.width + 'x' + cv.height
+    spr: Object.keys(SPR).length, kits: Object.keys(KITS).length,
+    kitN: Object.keys(KITS).reduce((a, k) => a + KITS[k].n, 0),
+    kitDraws: Object.keys(KITS).filter(k => KITS[k].n).length,
+    canvas: cv.width + 'x' + cv.height
   }),
   env: () => ({ W, H, SC, GROUND, DPR, camX, shakeX, shakeY }),
   sprites: () => SPR,
+  kits: () => KITS,
   start: () => startGame(),
   quality: q => applyQuality(q)
 };
@@ -158,5 +165,16 @@ window.MEMERUN.dev = {
   quality: q => applyQuality(q),
   hurtFx: () => { hurtFx = 1; shake = 14; },
   die: () => { state = 'over'; showOver(); },
+  atlasCanvas: n => AT[n] ? AT[n].cv : null,
+  gallery: (names, cols, rows, zoom) => {
+    GAL = { names, cols: cols || 7, rows: rows || 5, zoom: zoom || 1, scale: 4 };
+    return GAL;
+  },
+  galleryOff: () => { GAL = null; },
+  layout: () => (GAL && GAL.layout) || [],
+  spritesOn: pg => Object.keys(SPR).filter(k => SPR[k].page === pg),
+  kitNames: () => Object.keys(KITS),
+  kitDrop: () => Object.keys(KITS).filter(k => KITS[k].drop).map(k => k + ':' + KITS[k].drop),
+  _g: { THREE, PRIM, TILT, partGeo, buildKitGeo, mergeGeos, B, S, E, CP, CY, CN, RG, OC, HX, PR, P, col, bandOf, TILT, LIGHT },
   distance: m => { player.x = m * 60; camX = player.x - W * 0.30 / SC; nextX = player.x + 400; }
 };

@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")"
 
-FILES="src/00-head.html src/10-core.js src/30-const.js src/35-state.js src/40-state.js \
+FILES="src/00-head.html src/10-core.js src/12-kit.js src/14-cast.js src/30-const.js src/35-state.js src/40-state.js \
 src/20-art.js src/32-artdegen.js src/34-bgart.js src/40-bake.js src/50-draw.js \
 src/50-spawn.js src/60-game.js src/65-fx.js src/70-flow.js src/90-main.js"
 

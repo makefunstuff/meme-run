@@ -199,8 +199,8 @@ function labelSprite(label) {
 /* ---------------- build everything ---------------- */
 let TEX = {}, BATCH = {};
 function bakeAll() {
-  bakeFx(AT.ent); bakeMemes(AT.ent); bakeBlocks(AT.ent, 1.5); bakeBullets(AT.ent, 1.5);
-  bakePickups(AT.ent, 1.5); bakeGuns(AT.ent, 1.5); bakeBoss(AT.ent, 1.5); bakePlayer(AT.ent, 1.5);
+  bakeFx(AT.ent);              /* particles, glow, shadow, flash: the only baked entity art left */
+  makeKits();                  /* the cast is geometry, not pixels */
   for (const m of MEMES) labelSprite(m.label);
   bakeWorld(AT.world, 1);
   TEX = { 0: AT.world.texture(), 1: AT.ent.texture(), 2: AT.text.texture() };

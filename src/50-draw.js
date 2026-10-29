@@ -209,7 +209,18 @@ function drawCeiling(t) {
   for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('ceil', i * 88, CEIL, 92, 130, 0, WHITE, 1);
 }
 
-/* ---------------- entities ---------------- */
+/* ---------------- entities: 3D kits ---------------- */
+const KS = 1.15;                       // global kit world scale
+const KIT_SC = { rug: 1.25, engine: 1.3, atm: 1.15, cone: 1.1, nft: 1.08, monitor: 1.05 };
+
+/* world -> screen, with SC and shake baked in (same mapping the quads use) */
+function pushK(name, wx, wy, sx, sy, rot, tint, boost) {
+  const k = KITS[name];
+  if (!k) return;
+  k.push((wx - camX) * SC + shakeX, -(GROUND + wy * SC + shakeY),
+    (sx === undefined ? 1 : sx) * KS * SC, (sy === undefined ? sx : sy) * KS * SC, rot, tint, boost);
+}
+
 function drawEnemy(e, t) {
   const bob = Math.sin(t * 2.4 + e.ph) * 4;
   const shs = clamp(1 - (-e.y) / 400, 0.35, 1);
@@ -217,10 +228,9 @@ function drawEnemy(e, t) {
     e.r * 1.9 * shs, 11, 0, [0.23, 0.14, 0.25], 0.26);
   let sx = 1, sy = 1;
   if (e.spawn > 0) { const k = 1 + e.spawn * 0.6; sx = k; sy = 1 / k; }
-  const rot = Math.sin(t * 1.7 + e.ph) * 0.07;
-  const sp = SPR[e.m.art];
-  pushW(1, false, e.m.art, e.x, e.y + bob, sp.w * sx, sp.h * sy, rot, WHITE, 1);
-  if (e.hit > 0) pushW(1, true, e.m.art, e.x, e.y + bob, sp.w * sx, sp.h * sy, rot, tint('#fff2a8'), 0.9);
+  const rot = e.fly ? Math.sin(t * 2.1 + e.ph) * 0.16 : Math.sin(t * 1.7 + e.ph) * 0.07;
+  const hot = e.hit > 0;
+  pushK(e.m.art, e.x, e.y + bob, sx, sy, rot, hot ? '#ffd166' : null, hot ? 2.3 : 1);
   const hpMax = e.m.hp || 1;
   if (hpMax > 1) {
     const f = clamp(e.hp / hpMax, 0, 1);
@@ -232,126 +242,131 @@ function drawEnemy(e, t) {
     if (lbl) { const l = SPR[lbl]; pushW(2, false, lbl, e.x, e.y + bob - e.r - 26, l.w, l.h, 0, WHITE, 1); }
   }
 }
+
 function drawBlockObj(b, t) {
   pushW(0, false, 'shadow', camX + (b.x - b.w * 0.6) / SC, 3 / SC, b.w * 1.2, 10, 0, [0.23, 0.14, 0.25], 0.24);
+  const ks = KIT_SC[b.kind] || 1;
   if (b.kind === 'saw') {
-    const f = Math.floor(t * 6 * 8 / TAU) % 8;
-    pushW(1, false, 'b_saw' + f, b.x + b.w / 2, -b.h * 0.42, 80, 80, 0, WHITE, 1);
-    pushW(1, false, 'b_mount', b.x + b.w * 0.34, 0, 34, 28, 0, WHITE, 1);
+    pushK('b_saw', b.x + b.w / 2, -b.h * 0.44, ks, ks, t * 5.4, null, 1);
+    pushK('b_mount', b.x + b.w * 0.34, -b.h * 0.10, 1, 1, 0, null, 1);
     return;
   }
-  const key = 'b_' + b.kind, sp = SPR[key];
-  if (sp) pushW(1, false, key, b.x, 0, sp.w, sp.h, 0, WHITE, 1);
+  pushK('b_' + b.kind, b.x, -b.h * 0.44, ks, ks, 0, null, 1);
 }
+
 function drawPickup(p, t) {
   const bob = Math.sin(t * 2.6 + p.ph) * 5;
   if (p.kind === 'weapon') {
-    const sp = 'cr_' + p.wpn;
     wq('glow', p.x, p.y + bob, 2.6, 0, tint('#ffe27a'), 0.4, true);
-    wq(sp, p.x, p.y + bob, 1, Math.sin(t * 1.6 + p.ph) * 0.1, WHITE, 1);
+    pushK('cr_' + p.wpn, p.x, p.y + bob, 1, 1, Math.sin(t * 1.6 + p.ph) * 0.1, null, 1);
     return;
   }
   const name = p.kind === 'aura' ? 'pk_coin' : p.kind === 'gem' ? 'pk_gem' : p.kind === 'heart' ? 'pk_heart'
     : p.kind === 'bag' ? 'pk_bag' : p.kind === 'diamond' ? 'pk_diamond' : p.kind === 'advisory' ? 'pk_advisory' : 'pk_lever';
   const gl = { aura: '#ffd166', gem: '#ff9dbd', heart: '#ff5d73', bag: '#ffd166', diamond: '#8fd6ff', advisory: '#ffe27a', lever: '#ff5d73' }[p.kind];
   wq('glow', p.x, p.y + bob, p.kind === 'aura' ? 1.2 : 2.4, 0, tint(gl), p.kind === 'aura' ? 0.35 : 0.5, true);
-  let sx = 1;
-  if (p.kind === 'aura') sx = Math.max(0.18, Math.abs(Math.cos(t * 3 + p.ph)));
+  const sx = p.kind === 'aura' ? Math.max(0.18, Math.abs(Math.cos(t * 3 + p.ph))) : 1;
   const k = p.kind === 'heart' ? 1 + Math.sin(t * 6 + p.ph) * 0.1 : 1;
-  wqr(name, p.x, p.y + bob, SPR[name].w * sx * k, SPR[name].h * k,
-    p.kind === 'gem' ? Math.sin(t * 1.4 + p.ph) * 0.15 : 0, WHITE, 1);
+  pushK(name, p.x, p.y + bob, sx * k, k,
+    p.kind === 'gem' ? Math.sin(t * 1.4 + p.ph) * 0.15 : 0, null, 1);
 }
+
 function drawBullet(b) {
   const ang = Math.atan2(b.vy, b.vx);
   const add = b.kind === 'laser' || b.kind === 'bolt' || b.kind === 'pump' || b.kind === 'lever' || b.kind === 'coin';
   const name = 'bl_' + (b.kind === 'bolt' ? 'bolt' : b.kind);
-  const sp = SPR[name];
-  if (!sp) return;
-  if (b.kind === 'bread') wq(name, b.x, b.y, 1, Math.sin(bgT * 14 + b.seed) * 0.35, WHITE, 1);
-  else if (b.kind === 'crew') wq(name, b.x, b.y, 1, ang, tint(b.col || '#ff5d73'), 1);
-  else if (b.kind === 'orb') {
+  if (b.kind === 'bread') pushK(name, b.x, b.y, 1, 1, Math.sin(bgT * 14 + b.seed) * 0.35, null, 1);
+  else if (b.kind === 'crew') {
+    pushK(name, b.x, b.y, 1, 1, ang - Math.PI / 2, b.col, 1.3);
+    wq('glow', b.x, b.y, 1.1, 0, tint(b.col || '#ff5d73'), 0.35, true);
+  } else if (b.kind === 'orb') {
     wq('glow', b.x, b.y, 1.9, 0, tint('#a05ae0'), 0.7, true);
-    wq(name, b.x, b.y, 1, ang + Math.sin(bgT * 3 + b.seed) * 0.2, WHITE, 1);
+    pushK(name, b.x, b.y, 1, 1, ang + Math.sin(bgT * 3 + b.seed) * 0.2, null, 1);
   } else if (b.kind === 'rocket') {
     wq('glow', b.x, b.y, 1.7, ang, tint('#ff9040'), 0.7, true);
-    wq(name, b.x, b.y, 1, ang, WHITE, 1);
+    pushK(name, b.x, b.y, 1, 1, ang - Math.PI / 2, null, 1);
   } else if (b.kind === 'pump') {
     const g = 1 + Math.min(1.8, (1.3 - b.life) * 1.4);
     wq('glow', b.x, b.y, 2.1 * g, 0, tint('#ff9dbd'), 0.6, true);
-    wq(name, b.x, b.y, g, ang, WHITE, 1);
+    pushK(name, b.x, b.y, g, g, ang - Math.PI / 2, null, 1);
   } else {
-    wq(name, b.x, b.y, 1, ang, WHITE, 1, add);
-    wq('glow', b.x, b.y, 0.9, ang, tint('#ffffff'), 0.55, true);
+    if (add) wq('glow', b.x, b.y, 0.9, ang, tint('#ffffff'), 0.5, true);
+    pushK(name, b.x, b.y, 1, 1, b.kind === 'down' ? 0 : ang - Math.PI / 2, null, 1);
   }
 }
+
 function drawEBullet(b, t) {
   const name = b.kind === 'down' ? 'bl_down' : b.kind === 'mid' ? 'bl_mid' : b.kind === 'rekt' ? 'bl_rekt' : 'bl_heart';
-  wq(name, b.x, b.y, 1, Math.sin(t * 8 + b.seed) * 0.25, WHITE, 1);
+  pushK(name, b.x, b.y, 1, 1, Math.sin(t * 8 + b.seed) * 0.25 + (b.kind === 'down' ? 0 : -Math.PI / 2), null, 1);
 }
+
 function drawHole(h, t) {
   const k = clamp(h.life / h.max, 0, 1);
-  const rr2 = h.r * (0.6 + 0.4 * Math.sin(k * Math.PI));
-  wq('glow', h.x, h.y, rr2 * 0.34, 0, tint('#a05ae0'), 0.6 * k, true);
-  wq('holering', h.x, h.y, rr2 / 40, t * 2.2, WHITE, 0.85 * k);
-  wq('hole', h.x, h.y, rr2 * 0.72 / 24, 0, WHITE, k);
+  const rr2 = h.r * (0.6 + 0.4 * Math.sin(k * Math.PI)) / 26;
+  wq('glow', h.x, h.y, rr2 * 1.6, 0, tint('#a05ae0'), 0.6 * k, true);
+  pushK('hole', h.x, h.y, rr2, rr2, 0, null, 1);
+  pushK('holering', h.x, h.y, rr2 * 1.5, rr2 * 1.5, t * 2.2, null, k);
 }
+
 function drawPlayerQuad(t) {
   const p = player;
   const airH = Math.max(0, -R - p.y);
   const shs = clamp(1 - airH / 260, 0.4, 1);
   pushW(0, false, 'shadow', camX + (p.x - R * 1.15 * shs) / SC, (gravDir > 0 ? 2 : CEIL) / SC,
     R * 2.3 * shs, 12 * shs, 0, [0.23, 0.14, 0.25], 0.28 * shs);
-  let frame;
-  if (state === 'dying') frame = 'pd';
-  else if (p.blink > 0.02) frame = p.blink > 0.4 ? 'pb0' : 'pb1';
-  else if (muzzle > 0) frame = 'ps' + (Math.floor(runPhase / (TAU / 12)) % 12);
-  else if (!p.grounded) frame = 'pa' + clamp(Math.round((p.vy / 900 + 1) * 1.5), 0, 3);
-  else frame = 'p' + (Math.floor(runPhase / (TAU / 12)) % 12);
-  const tilt = clamp(p.vy / 1600, -0.14, 0.2);
-  const sq2 = p.squash;
-  const alpha = (invuln > 0 && Math.floor(invuln * 14) % 2 === 0) ? 0.35 : 1;
-  pushW(1, false, frame, p.x, p.y, PBOX[2] * (1 + sq2 * 0.5), PBOX[3] * (1 - sq2 * 0.5),
-    tilt + (gravDir < 0 ? 0 : 0), WHITE, alpha);
-  if (gravDir < 0) pushW(1, false, frame, p.x, p.y + R * 2, PBOX[2], PBOX[3], 0, WHITE, 0);
-  // gun
+  const flick = invuln > 0 && Math.floor(invuln * 14) % 2 === 0 ? 0.42 : 1;
+  const bob = Math.sin(runPhase * 2) * 2.4;
+  const tilt = clamp(p.vy / 1600, -0.16, 0.22);
+  const sq = p.squash;
+  const spin = state === 'dying' ? deathSpin : 0;
+  const PKS = 1.28;
+  const psx = (1 + sq * 0.45) * KS * PKS, psy = (1 - sq * 0.45) * KS * PKS;
+  /* legs trail the run cycle: swing in screen Z, lift on the back stroke */
+  for (let i = 0; i < 2; i++) {
+    const ph = runPhase + i * Math.PI;
+    const sw = Math.sin(ph) * 0.62 + spin;
+    const lift = Math.max(0, Math.cos(ph)) * 7;
+    pushK('pl_leg', p.x + Math.sin(ph) * 8, p.y + 4 - lift, PKS, PKS, sw, i ? '#ffc4d6' : null, flick);
+  }
+  pushK('pl_body', p.x, p.y + bob + 4, psx, psy, tilt + spin, null, flick);
+  pushK('pl_head', p.x + 1, p.y + R * 1.05 + bob * 1.4, psx, psy, tilt * 0.55 + spin, null, flick);
   const rec = recoil * 6;
-  const gx = p.x + R * 0.6 - rec, gy = p.y + R * 0.06;
-  const grot = -0.06 + p.aim * 0.12;
-  wq('g_' + gunKind, gx, gy, 1, grot, WHITE, alpha);
+  const grot = -0.06 + p.aim * 0.12 + spin;
+  pushK('pl_arm', p.x + R * 0.2 - rec * 0.6, p.y + R * 0.16 + bob, PKS, PKS, -0.42 + Math.sin(runPhase) * 0.3 + spin, null, flick);
+  pushK('g_' + gunKind, p.x + R * 0.72 - rec, p.y + R * 0.1 + bob, PKS, PKS, grot, null, flick);
   if (muzzle > 0) {
     const m = muzzle / 0.09;
-    pushW(1, true, 'flash', gx, gy, 68 * m, 68 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
+    pushW(1, true, 'flash', p.x + R * 0.86 - rec, p.y + R * 0.1 + bob, 68 * m, 68 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
   }
   if (shield > 0) {
     wq('glow', p.x, p.y, 3.4, 0, tint('#8fd6ff'), 0.45 + Math.sin(t * 6) * 0.1, true);
-    wq('pk_diamond', p.x + R * 1.1, p.y - R * 0.9, 0.7, t * 1.2, WHITE, 0.9);
+    pushK('pk_diamond', p.x + R * 1.1, p.y - R * 0.9, 0.8, 0.8, t * 1.2, null, 1);
   }
 }
+
 function drawBossQuad(t) {
   const b = boss;
   if (!b) return;
   const kind = b.kind === 1 ? 1 : 0;
   const by = b.y + Math.sin(t * 1.7) * 10;
-  const s = b.hitFx > 0 ? 1.06 : 1;
   const k = 1 + b.enter * 0.8;
-  wq('glow', b.x, by, 6 * s, 0, tint(kind ? '#6fb7ff' : '#ff5d73'), 0.4, true);
-  const base = kind ? 184 : 172, bh = kind ? 204 : 236;
-  pushW(1, false, 'boss' + kind, b.x, by, base * s * k, bh * s / k, 0, WHITE, 1);
-  if (b.hitFx > 0) pushW(1, true, 'boss' + kind, b.x, by, base * s * k, bh * s / k, 0, tint('#ff8888'), 0.5);
+  const hot = b.hitFx > 0;
+  const BS = 1.55;                                   // the algorithm towers over the feed
+  wq('glow', b.x, by, 6 * (1 + b.enter), 0, tint(kind ? '#6fb7ff' : '#ff5d73'), 0.4, true);
+  pushK('boss' + kind, b.x, by, k * BS, 1 / k * BS, 0, hot ? '#ff8888' : null, hot ? 2.1 : 1);
   const blink = Math.sin(t * 1.1) > 0.95 ? 0.14 : 1;
   const look = Math.sin(t * 1.6) * 10;
-  const ebase = kind ? 72 : 88, eh = kind ? 60 : 68;
-  pushW(1, false, 'boseye' + kind, b.x + look, by - 22, ebase, eh * blink, 0, WHITE, 1);
+  pushK('boss_eye', b.x + look, by - 20 * BS, BS, BS * blink, 0, hot ? '#ff8888' : null, hot ? 2 : 1);
   for (let i = 0; i < (QUAL.lab ? 5 : 3); i++) {
     const a = t * 0.9 + (i / 5) * TAU;
-    pushW(1, false, 'badge' + i, b.x + Math.cos(a) * 96, by + Math.sin(a) * 62 - 6, 36, 32, 0, WHITE, 1);
+    pushK('boss_badge' + i, b.x + Math.cos(a) * 104, by + Math.sin(a) * 70 - 6, BS * 0.95, BS * 0.95, a * 0.6, null, 1);
   }
-  // loading bar on the screen
   const pr = clamp(b.hp / b.maxHp, 0, 1);
-  pushW(1, false, 'px', b.x - 40, by + 34, 80, 12, 0, [0.12, 0.05, 0.2], 1);
-  if (pr > 0) pushW(1, false, 'px', b.x - 40, by + 34, 80 * pr, 12, 0,
+  pushW(1, false, 'px', b.x - 46, by + 52, 92, 14, 0, [0.12, 0.05, 0.2], 1);
+  if (pr > 0) pushW(1, false, 'px', b.x - 46, by + 52, 92 * pr, 14, 0,
     tint(pr > 0.5 ? '#7fd3a8' : pr > 0.22 ? '#ffd166' : '#ff5d73'), 1);
 }
+
 function drawPartsQ() {
   for (const p of parts) {
     const k = 1 - p.life / p.max;
@@ -407,5 +422,33 @@ function drawOverlayFx(t) {
       const yy = (i * 26 + (bgT * 260) % 26) % H;
       s8('scan', 0, yy, W, 10, 0, tint('#7ff0a8'), 0.06 * scanT);
     }
+  }
+}
+
+/* dev-only: sheet preview through the real render path (dev.gallery / dev.galleryOff).
+   Names are matched against baked sprites first, then kits. */
+let GAL = null;
+function drawGallery() {
+  if (!GAL) return;
+  const { names, cols, rows, scale } = GAL;
+  const cw = W / cols, ch = (H - 12) / rows;
+  GAL.layout = [];
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i], sp = SPR[name], kit = KITS[name];
+    const c = i % cols, r = (i / cols) | 0;
+    const x = c * cw + cw / 2, y = r * ch + ch / 2;
+    pushW(0, false, 'px', x, y, cw - 6, ch - 6, 0, [0.10, 0.10, 0.16], 1);
+    if (sp) {
+      const sc = Math.min((cw - 20) / sp.w, (ch - 20) / sp.h, scale || 3) * GAL.zoom;
+      pushW(0, false, 'px', x, y, sp.w * sc, sp.h * sc, 0, [1, 0, 1], 0.55);
+      pushS(sp.page, false, name, x, y, sp.w * sc, sp.h * sc, 0, WHITE, 1);
+      GAL.layout.push({ name, x, y, w: sp.w * sc, h: sp.h * sc, box: [sp.w, sp.h], page: sp.page });
+    } else if (kit) {
+      const sc = Math.min((cw - 16) / kit.w, (ch - 16) / kit.h, 6) * GAL.zoom;
+      pushW(0, false, 'px', x, y, kit.w * sc, kit.h * sc, 0, [1, 0, 1], 0.55);
+      const s2 = sc * KS * SC;
+      kit.push(x, -y, s2, s2, 0, null, 1);   /* grid space == screen space here */
+      GAL.layout.push({ name, x, y, w: kit.w * sc, h: kit.h * sc, box: [Math.round(kit.w), Math.round(kit.h)], kit: true });
+    } else GAL.layout.push({ name, missing: true });
   }
 }

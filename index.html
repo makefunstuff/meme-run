@@ -457,6 +457,528 @@ function camSetup() {
   camera.updateProjectionMatrix();
 }
 
+/* =========================================================================
+   3D KIT LAYER
+   The cast is built from primitives (boxes, icosahedra, capsules, cylinders,
+   cones) rendered through the same orthographic camera: a part seen face-on is
+   a flat shape — circle, square, triangle — while the extruded sides read as
+   volume. Shading is baked into vertex colours as three flat cel bands, and
+   every part carries an inflated ink-coloured shell, so silhouettes get a solid
+   cartoon outline.
+   No depth buffer: each kit is one merged geometry with triangles ordered
+   shell-first, body-after, which is a painter's algorithm for a sticker.
+   One kit type = one InstancedMesh = one draw call.
+   ========================================================================= */
+
+const BAND = [1.34, 1.0, 0.62];             // lit / base / shade
+const INKHEX = '#22131f';
+const ZAXIS = new THREE.Vector3(0, 0, 1);
+const WHITE3 = [1, 1, 1];
+/* Fixed world tilt, baked in at build time so the top and one side of every
+   volume are visible. The game only ever rotates kits in screen Z. */
+const TILT = new THREE.Matrix4().makeRotationX(-0.30).multiply(new THREE.Matrix4().makeRotationY(0.40));
+const LIGHT = new THREE.Vector3(-0.30, 0.78, 0.78).normalize();
+const INKC = new THREE.Color(INKHEX);
+
+function col(hex, k) { const c = new THREE.Color(hex); return [c.r * k, c.g * k, c.b * k]; }
+function bandOf(nx, ny, nz) {
+  const l = nx * LIGHT.x + ny * LIGHT.y + nz * LIGHT.z;
+  return l > 0.72 ? BAND[0] : l > 0.30 ? BAND[1] : BAND[2];
+}
+
+/* Low-poly primitives, faceted on purpose. */
+const PRIM = {
+  box: () => new THREE.BoxGeometry(1, 1, 1),
+  sph: () => new THREE.IcosahedronGeometry(0.5, 1),
+  sphLo: () => new THREE.IcosahedronGeometry(0.5, 0),      // shells and small parts
+  cap: () => new THREE.CapsuleGeometry(0.5, 1, 3, 7),
+  cyl: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 9, 1, false),
+  cone: () => new THREE.ConeGeometry(0.5, 1, 9),
+  pri: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 3, 1, false),
+  oct: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, false),
+  hex: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false),
+  ring: () => new THREE.TorusGeometry(0.4, 0.11, 4, 9),
+  quad: () => new THREE.PlaneGeometry(1, 1)
+};
+
+/* part helpers so the cast tables stay readable */
+const P = (p, x, y, z, w, h, d, c, o) => Object.assign({ p, x, y, z, w, h, d: d === undefined ? w : d, c }, o || {});
+const B = (x, y, z, w, h, d, c, o) => P('box', x, y, z, w, h, d, c, o);
+const S = (x, y, z, r, c, o) => P('sph', x, y, z, r, r, r, c, o);
+const E = (x, y, z, w, h, c, o) => P('sph', x, y, z, w, h, w * 0.7, c, o);
+const CP = (x, y, z, w, h, c, o) => P('cap', x, y, z, w, h, w, c, o);
+const CY = (x, y, z, r, h, c, o) => P('cyl', x, y, z, r * 2, h, r * 2, c, o);
+const CN = (x, y, z, r, h, c, o) => P('cone', x, y, z, r * 2, h, r * 2, c, o);
+const RG = (x, y, z, r, c, o) => P('ring', x, y, z, r, r, r, c, o);
+const OC = (x, y, z, r, h, c, o) => P('oct', x, y, z, r * 2, h, r * 2, c, o);
+const HX = (x, y, z, r, h, c, o) => P('hex', x, y, z, r * 2, h, r * 2, c, o);
+const PR = (x, y, z, r, h, c, o) => P('pri', x, y, z, r * 2, h, r * 2, c, o);
+const UP = Math.PI / 2;   // lay a cylinder/cone on its side (points along Z)
+
+/* one part -> [shell, body] non-indexed, vertex-coloured */
+function partGeo(pt, ink, pad) {
+  /* Shells are pure silhouette, so they get the cheapest primitive; a tiny part
+     does not need a faceted sphere either.
+     Careful: polyhedra (icosahedron, capsule) ship non-indexed and
+     toNonIndexed() then returns the SAME object — cloning keeps shell and body
+     as separate geometries, each transformed exactly once. */
+  const big = Math.max(pt.w, pt.h, pt.d) >= 16;
+  const srcOf = kind => {
+    const g0 = PRIM[kind]();
+    const ni = g0.index ? g0.toNonIndexed() : g0.clone();
+    g0.dispose();
+    return ni;
+  };
+  const bodyKey = (pt.p === 'sph' && !big) ? 'sphLo' : pt.p;
+  const shellKey = pt.p === 'sph' ? 'sphLo' : pt.p;   /* shells keep the part's shape */
+  const size = new THREE.Matrix4().makeScale(pt.w, pt.h, pt.d);
+  const rot = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(pt.rx || 0, pt.ry || 0, pt.rz || 0));
+  const M = size.premultiply(rot).premultiply(TILT);
+  const body = srcOf(bodyKey);
+  body.applyMatrix4(M);
+  body.translate(pt.x, pt.y, pt.z);
+
+  const base = col(pt.c, 1), bc = new Float32Array(body.attributes.position.count * 3), na = body.attributes.normal.array;
+  for (let i = 0; i < body.attributes.position.count; i++) {
+    const k = bandOf(na[i * 3], na[i * 3 + 1], na[i * 3 + 2]) * (pt.k === undefined ? 1 : pt.k);
+    bc[i * 3] = base[0] * k; bc[i * 3 + 1] = base[1] * k; bc[i * 3 + 2] = base[2] * k;
+  }
+  body.setAttribute('color', new THREE.BufferAttribute(bc, 3));
+
+  const shell = srcOf(shellKey);
+  shell.applyMatrix4(new THREE.Matrix4().makeScale(
+    (pt.w + pad * 2) / Math.max(pt.w, 0.01), (pt.h + pad * 2) / Math.max(pt.h, 0.01),
+    (pt.d + pad * 2) / Math.max(pt.d, 0.01)).premultiply(M));
+  shell.translate(pt.x, pt.y, pt.z);
+  const ic = col(pt.ink || ink, 1), sc = new Float32Array(shell.attributes.position.count * 3);
+  for (let i = 0; i < shell.attributes.position.count; i++) { sc[i * 3] = ic[0]; sc[i * 3 + 1] = ic[1]; sc[i * 3 + 2] = ic[2]; }
+  shell.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+  return [shell, body];
+}
+
+/* concat shell/body pairs in part order = painter's algorithm */
+function mergeGeos(list) {
+  let nv = 0;
+  for (const g of list) nv += g.attributes.position.count;
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), cr = new Float32Array(nv * 3), idx = new Uint32Array(nv);
+  let v = 0;
+  for (const g of list) {
+    const c = g.attributes.position.count;
+    pos.set(g.attributes.position.array, v * 3);
+    nor.set(g.attributes.normal.array, v * 3);
+    cr.set(g.attributes.color.array, v * 3);
+    for (let i = 0; i < c; i++) idx[v + i] = v + i;
+    v += c;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('color', new THREE.BufferAttribute(cr, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  for (const g of list) g.dispose();
+  return out;
+}
+
+function buildKitGeo(parts, opts) {
+  const ink = (opts && opts.ink) || INKHEX;
+  const pad = opts && opts.pad !== undefined ? opts.pad : 2.4;
+  const out = [];
+  for (const pt of parts) { const g = partGeo(pt, ink, pad); out.push(g[0], g[1]); }
+  return mergeGeos(out);
+}
+
+/* One InstancedMesh per kit type: tint per instance (hit flash), opacity per
+   kit (invulnerability flicker). */
+class Kit {
+  constructor(name, parts, max, opts) {
+    this.name = name; this.max = max; this.n = 0;
+    this.geo = buildKitGeo(parts, opts);
+    this.mat = new THREE.MeshBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 1, side: THREE.DoubleSide,
+      depthTest: false, depthWrite: false, toneMapped: false
+    });
+    this.mesh = new THREE.InstancedMesh(this.geo, this.mat, max);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+    this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    this.icol = this.mesh.instanceColor.array;
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = (opts && opts.order) || 15;
+    this.drop = 0;
+    this.mesh.count = 0;
+    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion();
+    this._p = new THREE.Vector3(); this._s = new THREE.Vector3();
+    scene.add(this.mesh);
+    const bb = this.geo.boundingBox = (this.geo.computeBoundingBox(), this.geo.boundingBox);
+    this.w = bb.max.x - bb.min.x; this.h = bb.max.y - bb.min.y;
+    KITS[name] = this;
+  }
+  begin() { this.n = 0; }
+  /* cx/cy screen px, sx/sy scale (1 = authored size), rot = screen Z spin.
+     tint multiplies the baked colours; boost > 1 blows it out for hit flashes. */
+  push(cx, cy, sx, sy, rot, tint, boost) {
+    const n = this.n;
+    if (n >= this.max) { this.drop++; return; }
+    this._q.setFromAxisAngle(ZAXIS, rot || 0);
+    this._p.set(cx, cy, 0);
+    this._s.set(sx === undefined ? 1 : sx, sy === undefined ? sx : sy, Math.min(sx || 1, sy === undefined ? sx : sy));
+    this.mesh.setMatrixAt(n, this._m.compose(this._p, this._q, this._s));
+    const c = tint ? col(tint, 1) : WHITE3;
+    const k = boost === undefined ? 1 : boost;
+    this.icol[n * 3] = c[0] * k; this.icol[n * 3 + 1] = c[1] * k; this.icol[n * 3 + 2] = c[2] * k;
+    this.n++;
+  }
+  end() {
+    this.mesh.count = this.n;
+    if (this.n) { this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor.needsUpdate = true; }
+  }
+}
+const KITS = Object.create(null);
+function kitBeginAll() { for (const k in KITS) KITS[k].begin(); }
+function kitEndAll() { for (const k in KITS) KITS[k].end(); }
+
+/* =========================================================================
+   14-cast.js — the whole cast as primitive kits.
+   Local space: x right, y up, z toward the camera. Sizes are world units, the
+   same box the baked sprites used (~80x86 for a meme). Order matters: parts
+   listed first are painted first, so put the body down before the face.
+   ========================================================================= */
+
+const SKIN = '#f0c8a8', SKIN2 = '#e6b48c', DARK = '#22131f', WHITE6 = '#f4f8ff', GREY = '#93a6c0';
+
+function castMemes() {
+  const crew = c => [
+    B(0, -6, -8, 34, 20, 20, c),                        // backpack
+    CP(-9, -34, 4, 20, 26, c), CP(9, -34, 4, 20, 26, c),
+    CP(0, -8, 0, 46, 54, c),                            // body + head dome
+    B(6, 2, 12, 26, 17, 10, '#bfe6ff'),                 // visor
+    B(14, 3, 16, 9, 9, 6, '#ffffff', { k: 1.15 })
+  ];
+  const dog = (c, snout) => [
+    CN(-17, 14, 2, 11, 20, c), CN(17, 14, 2, 11, 20, c),  // ears
+    S(0, 0, 0, 26, c),                                     // head
+    B(snout ? 12 : 0, -12, 14, snout ? 24 : 18, 16, 16, snout || c),
+    S(-9, 6, 22, 5.5, '#ffffff'), S(9, 6, 22, 5.5, '#ffffff'),
+    S(-9, 6, 25, 2.6, DARK), S(9, 6, 25, 2.6, DARK),
+    B(0, -20, 18, 12, 6, 6, DARK)
+  ];
+  const out = {};
+
+  out.m_sus0 = crew('#e0524e');
+  out.m_sus1 = crew('#3f8fd6');
+  out.m_sus2 = crew('#59c98d');
+  out.m_npc = [
+    B(0, 4, 0, 46, 44, 26, GREY),
+    B(-9, 12, 16, 8, 8, 6, DARK), B(9, 12, 16, 8, 8, 6, DARK),
+    B(0, -6, 16, 18, 5, 6, DARK),
+    B(-12, -30, 0, 12, 18, 12, '#7c8ea6'), B(12, -30, 0, 12, 18, 12, '#7c8ea6')
+  ];
+  out.m_toilet = [
+    B(0, 16, -6, 46, 8, 26, '#e8eef6'),
+    B(0, 30, -6, 40, 22, 22, '#e8eef6'),
+    CY(0, -8, 0, 30, 28, '#f7fbff'),
+    B(0, -8, 26, 44, 9, 8, '#dfe7f0'),
+    S(0, 6, 8, 17, SKIN),
+    S(-7, 10, 20, 4.5, '#ffffff'), S(7, 10, 20, 4.5, '#ffffff'),
+    S(-7, 10, 23, 2.2, DARK), S(7, 10, 23, 2.2, DARK),
+    E(0, -2, 20, 16, 8, '#8a4a58')
+  ];
+  out.m_doge = dog('#e8a94b', '#f6d3a0');
+  out.m_shib = dog('#e8b072', '#f8dfb8');
+  out.m_bonk = [
+    ...dog('#e8a94b', '#f6d3a0'),
+    B(20, 22, -6, 14, 52, 14, '#b5773a', { rz: 0.55 }),
+    B(30, 40, -6, 22, 20, 20, '#8f5a2c', { rz: 0.55 })
+  ];
+  out.m_wif = [
+    ...dog('#f2f4f8', '#e8ecf2'),
+    CN(0, 26, 0, 24, 20, '#e0524e', { rx: Math.PI }),
+    B(0, 34, 0, 44, 6, 30, '#c23f3c')
+  ];
+  out.m_pepe = [
+    B(0, 2, 0, 46, 42, 28, '#69c96a'),
+    E(0, -18, 16, 34, 15, '#c9605f'),
+    S(-11, 14, 20, 7, '#ffffff'), S(11, 14, 20, 7, '#ffffff'),
+    S(-11, 13, 25, 3, DARK), S(11, 13, 25, 3, DARK),
+    B(-9, -32, 0, 12, 14, 12, '#4f9c52'), B(9, -32, 0, 12, 14, 12, '#4f9c52')
+  ];
+  out.m_brain = [
+    B(0, 0, 0, 46, 42, 30, '#ff9dbd'),
+    S(-14, 24, 6, 9, '#ff7fa8'), S(0, 30, 6, 9, '#ff7fa8'), S(14, 24, 6, 9, '#ff7fa8'),
+    S(-10, 6, 17, 6.5, '#ffffff'), S(10, 6, 17, 6.5, '#ffffff'),
+    S(-10, 5, 22, 2.8, DARK), S(10, 5, 22, 2.8, DARK),
+    B(0, -14, 16, 20, 7, 6, '#8a3a52')
+  ];
+  out.m_crown = [
+    B(0, -12, 0, 40, 34, 26, SKIN),
+    OC(0, 16, 0, 26, 12, '#ffd166'),
+    CN(-18, 28, 0, 8, 18, '#ffd166'), CN(0, 30, 0, 8, 22, '#ffd166'), CN(18, 28, 0, 8, 18, '#ffd166'),
+    S(0, 16, 20, 5, '#ff5d73'),
+    S(-9, -8, 18, 5, '#ffffff'), S(9, -8, 18, 5, '#ffffff'),
+    S(-9, -8, 22, 2.2, DARK), S(9, -8, 22, 2.2, DARK)
+  ];
+  out.m_ohio = [
+    OC(0, 0, 0, 34, 18, '#4a2f5e', { rx: UP }),
+    RG(0, 0, 0, 32, '#ff2e88', { rx: UP }),
+    OC(0, 0, 0, 20, 22, '#2b1638', { rx: UP }),
+    S(-9, 4, 14, 5.5, '#ffe27a'), S(9, 4, 14, 5.5, '#ffe27a'),
+    B(-20, -22, 4, 10, 22, 10, '#6b3d7a', { rz: 0.5 }), B(20, -22, 4, 10, 22, 10, '#6b3d7a', { rz: -0.5 })
+  ];
+  out.m_grass = [
+    B(0, -14, 0, 50, 22, 26, '#5fa86a'),
+    PR(-16, 4, 0, 8, 22, '#7fd48a'), PR(-4, 8, 4, 8, 26, '#8fe3a0'), PR(8, 6, -4, 8, 24, '#7fd48a'), PR(19, 2, 2, 7, 18, '#6fc07a'),
+    S(-9, -12, 15, 5, '#ffffff'), S(9, -12, 15, 5, '#ffffff'),
+    S(-9, -12, 19, 2.2, DARK), S(9, -12, 19, 2.2, DARK)
+  ];
+  out.m_ratio = [
+    B(0, 6, 0, 54, 42, 24, WHITE6),
+    PR(0, -20, 0, 12, 16, WHITE6, { rx: Math.PI }),
+    B(-12, 12, 16, 9, 20, 6, DARK), B(4, 12, 16, 9, 20, 6, DARK),
+    PR(19, 10, 16, 8, 16, '#ff5d73', { rx: Math.PI })
+  ];
+  out.m_fries = [
+    B(-11, 26, 0, 7, 34, 12, '#f6e7a8'), B(-4, 30, 4, 7, 38, 12, '#f6e7a8'),
+    B(4, 30, -4, 7, 40, 12, '#f6e7a8'), B(11, 26, 2, 7, 34, 12, '#f6e7a8'),
+    PR(0, -6, 0, 26, 38, '#ff5d73', { rx: Math.PI }),
+    B(0, 6, 20, 30, 8, 8, '#c23f3c'),
+    S(-8, -2, 22, 5, '#ffffff'), S(8, -2, 22, 5, '#ffffff'),
+    S(-8, -2, 26, 2.2, DARK), S(8, -2, 26, 2.2, DARK)
+  ];
+  out.m_coat = [
+    CP(0, -6, 0, 40, 52, '#3d3d4f'),
+    S(0, 26, 0, 21, SKIN2),
+    B(0, 38, 0, 38, 12, 24, '#2f2a22'),
+    B(0, 27, 18, 32, 8, 8, '#151020'),
+    B(-16, -34, 0, 12, 20, 12, '#2a2a38'), B(16, -34, 0, 12, 20, 12, '#2a2a38')
+  ];
+  out.m_jaw = [
+    B(0, 8, 0, 44, 42, 28, SKIN),
+    B(0, -18, 12, 34, 20, 22, SKIN2),
+    B(0, -22, 22, 22, 6, 8, '#8a4a58'),
+    S(-11, 14, 17, 5.5, '#ffffff'), S(11, 14, 17, 5.5, '#ffffff'),
+    S(-11, 13, 21, 2.4, DARK), S(11, 13, 21, 2.4, DARK)
+  ];
+  out.m_mega = [
+    B(-14, 0, 0, 26, 26, 24, '#c9c9d6'),
+    CN(14, 0, 0, 26, 34, '#ff8a4c', { rz: -UP }),
+    B(-6, -26, 0, 12, 22, 14, '#8f86a8'),
+    RG(34, 0, 0, 12, '#ffe27a'), RG(40, 0, 0, 16, '#ffd166'),
+    S(-16, 6, 14, 5, '#ffffff'), S(-16, 6, 18, 2.2, DARK)
+  ];
+  out.m_fine = [
+    CY(0, -6, 0, 24, 34, '#d9a06a'),
+    RG(24, -2, 0, 12, '#b5773a', { ry: UP }),
+    CN(-6, 20, 0, 9, 20, '#ff9040'), CN(8, 24, 4, 7, 16, '#ffd166'),
+    S(-8, -4, 20, 5, '#ffffff'), S(8, -4, 20, 5, '#ffffff'),
+    S(-8, -4, 24, 2.2, DARK), S(8, -4, 24, 2.2, DARK)
+  ];
+  out.m_bird = [
+    PR(0, -10, 0, 24, 30, '#e8e2d0', { rx: Math.PI }),
+    S(0, 14, 6, 17, '#a97c50'),
+    PR(16, 10, 14, 9, 12, '#ffb648', { rz: -UP }),
+    S(-6, 18, 20, 5, '#ffffff'), S(6, 18, 20, 5, '#ffffff'),
+    S(-6, 18, 24, 2.2, DARK), S(6, 18, 24, 2.2, DARK),
+    PR(-4, 34, 0, 7, 14, '#f6f2e6')
+  ];
+  out.m_chad = [
+    B(0, -20, 0, 52, 30, 26, '#4a4a5e'),
+    B(0, 14, 0, 42, 44, 28, '#e6e0f0'),
+    B(0, -6, 8, 36, 18, 24, '#dcd4e8'),
+    B(-11, 20, 18, 11, 7, 6, DARK), B(11, 20, 18, 11, 7, 6, DARK),
+    B(0, 34, 0, 44, 12, 26, '#3f3a4a')
+  ];
+  out.m_bot = [
+    B(0, -6, 0, 42, 48, 26, '#3a2340'),
+    B(0, 4, 14, 30, 26, 8, '#151020'),
+    PR(0, 6, 20, 10, 14, '#ff5d73', { rx: Math.PI }),
+    CY(0, 32, 0, 4, 20, '#8f86a8'), S(0, 44, 0, 7, '#ff5d73'),
+    B(-14, -34, 0, 12, 16, 12, '#2a1a30'), B(14, -34, 0, 12, 16, 12, '#2a1a30')
+  ];
+  /* degen */
+  out.m_pepe = out.m_pepe;
+  out.m_whale = [
+    E(0, 0, 0, 62, 40, '#5b8fd6'),
+    E(-30, 6, 0, 22, 26, '#4c7fc4'),
+    B(34, 2, 0, 22, 12, 16, '#4c7fc4', { rz: 0.5 }), B(34, -4, 0, 22, 12, 16, '#4c7fc4', { rz: -0.5 }),
+    S(-22, 8, 18, 6, '#ffffff'), S(-22, 8, 22, 2.8, DARK),
+    B(-40, 14, 0, 16, 6, 12, '#8fd6ff'),
+    CN(-40, 26, 0, 7, 16, '#8fd6ff'), CN(-32, 30, 4, 6, 14, '#8fd6ff')
+  ];
+  out.m_rocket = [
+    CY(0, -4, 0, 16, 40, '#eef2f8'),
+    CN(0, 26, 0, 16, 22, '#ff5d73'),
+    PR(-18, -22, 0, 12, 20, '#c9c9d6', { rz: 0.4 }), PR(18, -22, 0, 12, 20, '#c9c9d6', { rz: -0.4 }),
+    CN(0, -34, 0, 12, 22, '#ff9040', { rx: Math.PI }),
+    B(0, -2, 18, 16, 12, 8, '#8fd6ff')
+  ];
+  out.m_candle = [
+    B(0, -8, 0, 26, 46, 26, '#ff5d73'),
+    B(0, 18, 0, 4, 12, 4, DARK),
+    CN(0, 32, 0, 9, 20, '#ffd166'),
+    B(-24, -28, 0, 12, 4, 12, '#7ff0a8'), B(24, 12, 0, 12, 4, 12, '#ff2e88')
+  ];
+  out.m_diamondm = [
+    OC(0, 8, 0, 30, 22, '#bfe9ff'),
+    OC(0, -12, 0, 22, 26, '#8fd6ff', { rx: Math.PI }),
+    S(0, 12, 22, 6, '#ffffff', { k: 1.3 }),
+    B(-30, -14, 0, 16, 16, 16, SKIN), B(30, -14, 0, 16, 16, 16, SKIN)
+  ];
+  out.m_rug = [
+    B(0, -12, 0, 58, 16, 22, '#b2546f'),
+    B(-14, 0, 0, 20, 12, 20, '#8f3f5a'), B(14, 0, 0, 20, 12, 20, '#d4708a'),
+    CY(-30, -12, 0, 10, 20, '#c25f7a', { rz: UP }),
+    B(20, -26, 0, 26, 6, 14, '#e8c878'),
+    S(-6, -22, 14, 4.5, '#ffffff'), S(-6, -22, 18, 2, DARK)
+  ];
+  out.m_printer = [
+    B(0, -10, 0, 50, 34, 28, '#8fe3a0'),
+    B(0, 8, 6, 42, 8, 24, '#4f9c52'),
+    B(-20, 22, 8, 18, 22, 12, '#f4f8ff', { rz: 0.3 }), B(6, 28, -4, 18, 22, 12, '#f4f8ff', { rz: -0.25 }),
+    B(0, -12, 16, 28, 12, 8, '#151020'),
+    S(-16, -14, 18, 5, '#ffffff'), S(16, -14, 18, 5, '#ffffff'),
+    S(-16, -14, 22, 2.2, DARK), S(16, -14, 22, 2.2, DARK)
+  ];
+  out.m_moon = [
+    S(0, 0, 0, 30, '#ffe27a'),
+    S(-14, 12, 22, 6, '#f6d3a0'), S(12, -8, 24, 8, '#f6d3a0'), S(4, 18, 20, 4, '#f6d3a0'),
+    B(-11, 2, 26, 8, 10, 6, DARK), B(11, 2, 26, 8, 10, 6, DARK),
+    E(0, -14, 26, 18, 8, '#8a4a58')
+  ];
+  return out;
+}
+
+function castPlayer() {
+  /* parts are pushed separately so the run cycle is real motion, not frames */
+  return {
+    pl_body: [B(0, 0, 0, 30, 34, 22, '#ff6b8a'), B(0, 6, -10, 22, 22, 12, '#d94f6c')],
+    pl_head: [S(0, 0, 0, 19, '#ffd7e2'), S(-7, 4, 15, 4.6, '#ffffff'), S(7, 4, 15, 4.6, '#ffffff'),
+      S(-7, 4, 18, 2.1, DARK), S(7, 4, 18, 2.1, DARK), B(0, -8, 16, 12, 5, 5, '#8a4a58')],
+    pl_arm: [CP(0, 0, 0, 13, 24, '#ffd7e2'), S(0, -14, 0, 7, '#f6b8c8')],
+    pl_leg: [B(0, 0, 0, 13, 22, 14, '#8f5f7a'), B(0, -12, 4, 17, 9, 18, '#ffd166')],
+    pl_gun: [B(0, 0, 0, 30, 12, 12, '#3a2340'), B(16, 1, 0, 14, 8, 8, '#8f86a8'),
+      B(-12, -6, 0, 10, 14, 10, '#5a3f68')]
+  };
+}
+
+function castGuns() {
+  return {
+    g_blaster: [B(0, 0, 0, 34, 13, 13, '#4a4a5e'), B(18, 2, 0, 14, 9, 9, '#8fd6ff'), B(-14, -6, 0, 11, 15, 11, '#2f2a3a')],
+    g_bread: [B(0, 0, 0, 30, 22, 20, '#e8b072'), B(0, 12, 0, 24, 6, 16, '#c98b4a'), B(16, 0, 0, 10, 16, 14, '#f6d3a0')],
+    g_prism: [B(0, 0, 0, 40, 11, 11, '#8fd6ff'), CN(24, 0, 0, 8, 16, '#ff9dbd', { rz: -UP }), B(-16, -4, 0, 12, 16, 12, '#4a6f8a')],
+    g_voidgun: [B(0, 0, 0, 30, 18, 16, '#4a2f5e'), CY(20, 0, 0, 9, 14, '#a05ae0', { rz: UP }), RG(28, 0, 0, 8, '#c9a8e8')],
+    g_susgun: [B(0, 0, 0, 28, 20, 18, '#3f8fd6'), B(12, 6, 8, 14, 10, 10, '#bfe6ff'), B(-14, -6, 0, 10, 14, 10, '#2f5f8a')],
+    g_moonshot: [CN(14, 0, 0, 9, 20, '#ff5d73', { rz: -UP }), CY(-4, 0, 0, 8, 18, '#eef2f8', { rz: UP }),
+      PR(-16, 8, 0, 7, 12, '#ff9040', { rz: 0.6 }), PR(-16, -8, 0, 7, 12, '#ff9040', { rz: -0.6 })],
+    g_pump: [B(0, 0, 0, 26, 22, 20, '#ff9dbd'), CN(16, 0, 0, 10, 14, '#ff5d73', { rz: -UP }), B(-14, -4, 0, 10, 14, 12, '#c23f3c')],
+    g_leverage: [B(0, 0, 0, 32, 14, 14, '#f4f8ff'), B(0, 0, 8, 26, 5, 5, '#ff5d73'), B(18, 0, 0, 8, 12, 12, '#ffd166')],
+    g_airdrop: [B(0, 0, 0, 28, 22, 20, '#ffd166'), CY(16, 0, 0, 8, 8, '#ffe98a', { rz: UP }), B(-14, -4, 0, 10, 14, 12, '#c98b4a')]
+  };
+}
+
+function castBullets() {
+  return {
+    bl_bolt: [B(0, 0, 0, 20, 8, 8, '#8fd6ff'), CN(13, 0, 0, 6, 12, '#ffffff', { rz: -UP })],
+    bl_laser: [B(0, 0, 0, 30, 5, 5, '#ff5d73'), B(0, 0, 6, 34, 3, 3, '#ffffff', { k: 1.3 })],
+    bl_bread: [B(0, 0, 0, 18, 14, 12, '#e8b072'), B(0, 7, 0, 14, 4, 10, '#c98b4a')],
+    bl_coin: [CY(0, 0, 0, 11, 5, '#ffd166', { rx: UP }), OC(0, 0, 2, 6, 6, '#ffe98a', { rx: UP })],
+    bl_rocket: [CN(0, 0, 0, 9, 18, '#ff5d73', { rz: -UP }), CY(-12, 0, 0, 8, 16, '#eef2f8', { rz: UP }), CN(-24, 0, 0, 7, 14, '#ff9040', { rz: UP })],
+    bl_pump: [S(0, 0, 0, 16, '#ff9dbd'), CN(14, 0, 0, 7, 12, '#ffffff', { rz: -UP })],
+    bl_lever: [B(0, 0, 0, 26, 12, 10, '#f4f8ff'), B(0, 0, 6, 22, 4, 4, '#ff5d73'), CN(16, 0, 0, 7, 12, '#ffd166', { rz: -UP })],
+    bl_crew: [CP(0, 0, 0, 16, 22, '#3f8fd6'), B(4, 4, 8, 10, 7, 6, '#bfe6ff')],
+    bl_orb: [S(0, 0, 0, 13, '#a05ae0'), RG(0, 0, 0, 14, '#c9a8e8')],
+    bl_down: [PR(0, 0, 0, 13, 14, '#ff5d73', { rx: Math.PI }), B(0, 6, 0, 10, 8, 10, '#c23f3c')],
+    bl_mid: [B(0, 0, 0, 22, 16, 12, '#3f8fd6'), B(0, 0, 8, 14, 8, 4, '#f4f8ff')],
+    bl_heart: [S(-6, 2, 0, 8, '#ff5d73'), S(6, 2, 0, 8, '#ff5d73'), PR(0, -8, 0, 12, 12, '#ff5d73', { rx: Math.PI })],
+    bl_rekt: [B(0, 0, 0, 20, 20, 12, '#ff2e88'), B(0, 0, 8, 12, 4, 4, '#ffffff')]
+  };
+}
+
+function castPickups() {
+  return {
+    pk_coin: [CY(0, 0, 0, 13, 6, '#ffd166', { rx: UP }), OC(0, 0, 3, 7, 4, '#ffe98a', { rx: UP })],
+    pk_gem: [OC(0, 4, 0, 15, 14, '#ff9dbd'), OC(0, -8, 0, 11, 14, '#ff7fa8', { rx: Math.PI })],
+    pk_heart: [S(-6, 4, 0, 8.5, '#ff5d73'), S(6, 4, 0, 8.5, '#ff5d73'), PR(0, -8, 0, 14, 14, '#ff5d73', { rx: Math.PI })],
+    pk_bag: [B(0, -4, 0, 30, 26, 20, '#ffd166'), RG(0, 14, 0, 9, '#c98b4a', { rx: UP }), B(0, 0, 14, 12, 12, 6, '#8a6a2a')],
+    pk_diamond: [OC(0, 5, 0, 16, 13, '#bfe9ff'), OC(0, -8, 0, 12, 14, '#8fd6ff', { rx: Math.PI }), S(4, 8, 14, 4, '#ffffff', { k: 1.3 })],
+    pk_advisory: [B(0, 0, 0, 26, 32, 8, '#f4f8ff'), B(-6, 8, 6, 14, 3, 3, '#8f86a8'), B(-2, 0, 6, 18, 3, 3, '#8f86a8'), B(0, -8, 6, 12, 3, 3, '#8f86a8')],
+    pk_lever: [B(0, 0, 0, 28, 20, 12, '#ff5d73'), B(0, 0, 8, 20, 6, 4, '#f4f8ff')],
+    cr_blaster: [B(0, 0, 0, 34, 26, 22, '#4a4a5e'), B(14, 2, 0, 12, 8, 8, '#8fd6ff')],
+    cr_bread: [B(0, 0, 0, 34, 26, 22, '#e8b072'), B(0, 10, 0, 26, 6, 18, '#c98b4a')],
+    cr_prism: [B(0, 0, 0, 34, 26, 22, '#8fd6ff'), B(14, 0, 0, 12, 8, 8, '#ff9dbd')],
+    cr_voidgun: [B(0, 0, 0, 34, 26, 22, '#4a2f5e'), RG(0, 0, 12, 10, '#a05ae0')],
+    cr_susgun: [B(0, 0, 0, 34, 26, 22, '#3f8fd6'), B(10, 4, 10, 12, 9, 8, '#bfe6ff')],
+    cr_moonshot: [B(0, 0, 0, 34, 26, 22, '#ff5d73'), CN(0, 8, 12, 8, 16, '#eef2f8')],
+    cr_pump: [B(0, 0, 0, 34, 26, 22, '#ff9dbd'), CN(0, 10, 12, 9, 14, '#ffffff', { rx: Math.PI })],
+    cr_leverage: [B(0, 0, 0, 34, 26, 22, '#f4f8ff'), B(0, 8, 12, 20, 6, 6, '#ff5d73')],
+    cr_airdrop: [B(0, 0, 0, 34, 26, 22, '#ffd166'), CY(0, 8, 12, 8, 6, '#ffe98a', { rx: UP })]
+  };
+}
+
+function castBlocks() {
+  return {
+    b_spike: [B(0, 0, 0, 46, 40, 34, '#8f5a2c'), B(0, 22, 0, 40, 6, 30, '#6b4420'),
+      PR(-14, 30, 0, 8, 18, '#c9c9d6'), PR(0, 32, 0, 8, 20, '#c9c9d6'), PR(14, 30, 0, 8, 18, '#c9c9d6')],
+    b_saw: [CY(0, 0, 0, 30, 12, '#c9c9d6', { rx: UP }),
+      PR(-26, 0, 0, 9, 12, '#e8ecf2', { rz: 0 }), PR(26, 0, 0, 9, 12, '#e8ecf2', { rz: 0 }),
+      PR(0, 26, 0, 9, 12, '#e8ecf2', { rz: UP }), PR(0, -26, 0, 9, 12, '#e8ecf2', { rz: UP }),
+      PR(19, 19, 0, 9, 12, '#e8ecf2', { rz: 0.78 }), PR(-19, 19, 0, 9, 12, '#e8ecf2', { rz: -0.78 }),
+      PR(19, -19, 0, 9, 12, '#e8ecf2', { rz: -0.78 }), PR(-19, -19, 0, 9, 12, '#e8ecf2', { rz: 0.78 }),
+      S(0, 0, 0, 10, '#ff5d73')],
+    b_mount: [B(0, 0, 0, 30, 22, 26, '#6b5a78'), B(0, 14, 0, 22, 10, 20, '#8f86a8')],
+    b_cone: [CN(0, 14, 0, 14, 34, '#ff8a4c'), B(0, -14, 0, 40, 14, 34, '#e8ecf2'), B(0, 4, 0, 22, 6, 20, '#f4f8ff')],
+    b_monitor: [B(0, 4, 0, 52, 40, 26, '#3a3a4a'), B(0, 6, 14, 42, 30, 6, '#151020'),
+      B(-10, 8, 18, 8, 14, 4, '#7ff0a8'), B(0, 8, 18, 8, 14, 4, '#7ff0a8'), B(10, 8, 18, 8, 14, 4, '#7ff0a8'),
+      B(0, -24, 0, 20, 10, 20, '#4a4a5e')],
+    b_nft: [B(0, 0, 0, 46, 52, 14, '#ffd166'), B(0, 0, 8, 34, 40, 8, '#6b3d7a'), S(0, 4, 14, 9, '#ff9dbd')],
+    b_rug: [B(0, 0, 0, 60, 20, 26, '#b2546f'), B(0, 12, 0, 52, 8, 22, '#8f3f5a'), B(24, -12, 0, 20, 6, 16, '#e8c878')],
+    b_engine: [B(0, -6, 0, 52, 44, 34, '#ff5d73'), CY(-18, 20, 0, 9, 20, '#c9c9d6'), CY(18, 20, 0, 9, 20, '#c9c9d6'),
+      B(0, -4, 18, 34, 10, 6, '#151020'), B(-26, -24, 0, 12, 14, 20, '#8f86a8'), B(26, -24, 0, 12, 14, 20, '#8f86a8')],
+    b_candle: [B(0, -4, 0, 30, 50, 30, '#ff5d73'), B(0, 24, 0, 5, 12, 5, DARK),
+      CN(0, 38, 0, 10, 20, '#ffd166'), B(-16, -26, 0, 12, 5, 12, '#7ff0a8'), B(16, 18, 0, 12, 5, 12, '#ff2e88')],
+    b_atm: [B(0, 0, 0, 46, 56, 30, '#7fd48a'), B(0, 12, 16, 32, 22, 6, '#151020'), B(0, -10, 18, 26, 8, 6, '#f4f8ff'),
+      B(-14, -22, 16, 8, 6, 4, '#ffd166'), B(-4, -22, 16, 8, 6, 4, '#ffd166'), B(6, -22, 16, 8, 6, 4, '#ffd166')]
+  };
+}
+
+function castBoss() {
+  return {
+    boss0: [B(0, 0, 0, 78, 108, 30, '#1a1224'), B(0, 4, 16, 66, 92, 8, '#2b1638'),
+      B(0, 44, 18, 40, 10, 6, '#ff5d73'), B(0, -46, 18, 52, 8, 6, '#7ff0a8'),
+      CN(-16, 62, 0, 9, 20, '#ffd166'), CN(0, 66, 0, 9, 24, '#ffd166'), CN(16, 62, 0, 9, 20, '#ffd166'),
+      OC(0, 56, 0, 22, 8, '#ffd166')],
+    boss1: [B(0, 0, 0, 84, 96, 34, '#121a2a'), B(0, 2, 18, 72, 80, 8, '#1a2a44'),
+      B(0, 40, 20, 44, 10, 6, '#8fd6ff'), B(0, -40, 20, 44, 8, 6, '#7ff0a8'),
+      CN(-18, 56, 0, 9, 22, '#8fd6ff'), CN(0, 60, 0, 9, 26, '#8fd6ff'), CN(18, 56, 0, 9, 22, '#8fd6ff')],
+    boss_eye: [S(0, 0, 0, 26, '#f4f8ff'), S(0, 0, 16, 13, '#3f8fd6'), S(0, 0, 22, 7, DARK), S(-8, 8, 20, 4, '#ffffff', { k: 1.2 })],
+    boss_badge0: [S(0, 0, 0, 15, '#ff5d73'), B(0, 0, 10, 14, 5, 4, '#ffffff')],
+    boss_badge1: [S(0, 0, 0, 15, '#3f8fd6'), B(-5, 0, 10, 6, 12, 4, '#ffffff', { rz: 0.6 }), B(4, -4, 10, 12, 5, 4, '#ffffff', { rz: -0.4 })],
+    boss_badge2: [S(0, 0, 0, 15, '#ffd166'), PR(0, 0, 10, 8, 10, '#22131f', { rx: Math.PI })],
+    boss_badge3: [S(0, 0, 0, 15, '#7ff0a8'), B(0, 4, 10, 14, 4, 4, '#22131f'), B(0, -4, 10, 14, 4, 4, '#22131f')],
+    boss_badge4: [S(0, 0, 0, 15, '#c9a8e8'), S(-5, 3, 12, 4, '#22131f'), S(5, 3, 12, 4, '#22131f')],
+    hole: [S(0, 0, 0, 24, '#0d0812'), RG(0, 0, 6, 24, '#a05ae0')],
+    holering: [RG(0, 0, 0, 26, '#a05ae0', { rx: UP }), RG(0, 0, 0, 20, '#c9a8e8', { rx: UP })]
+  };
+}
+
+/* kit instance budgets: how many of one type can be on screen at once */
+const KIT_MAX = { enemy: 46, bullet: 70, pickup: 30, block: 26, part: 10 };
+function makeKits() {
+  const cast = Object.assign({}, castMemes(), castBullets(), castPickups(), castBlocks(), castBoss(), castPlayer(), castGuns());
+  const stats = { kits: 0, tris: 0 };
+  for (const name in cast) {
+    const parts = cast[name];
+    let max = 3;
+    if (/^m_/.test(name)) max = KIT_MAX.enemy;
+    else if (/^bl_/.test(name)) max = KIT_MAX.bullet;
+    else if (/^pk_|^cr_/.test(name)) max = KIT_MAX.pickup;
+    else if (/^b_/.test(name)) max = KIT_MAX.block;
+    else if (/^pl_|^g_|^boss/.test(name)) max = KIT_MAX.part;
+    new Kit(name, parts, max);
+    stats.kits++;
+  }
+  return stats;
+}
+
 /* ============================================================
    1. content: modes, skies, weapons, events, tickers
    ============================================================ */
@@ -2223,8 +2745,8 @@ function labelSprite(label) {
 /* ---------------- build everything ---------------- */
 let TEX = {}, BATCH = {};
 function bakeAll() {
-  bakeFx(AT.ent); bakeMemes(AT.ent); bakeBlocks(AT.ent, 1.5); bakeBullets(AT.ent, 1.5);
-  bakePickups(AT.ent, 1.5); bakeGuns(AT.ent, 1.5); bakeBoss(AT.ent, 1.5); bakePlayer(AT.ent, 1.5);
+  bakeFx(AT.ent);              /* particles, glow, shadow, flash: the only baked entity art left */
+  makeKits();                  /* the cast is geometry, not pixels */
   for (const m of MEMES) labelSprite(m.label);
   bakeWorld(AT.world, 1);
   TEX = { 0: AT.world.texture(), 1: AT.ent.texture(), 2: AT.text.texture() };
@@ -2453,7 +2975,18 @@ function drawCeiling(t) {
   for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('ceil', i * 88, CEIL, 92, 130, 0, WHITE, 1);
 }
 
-/* ---------------- entities ---------------- */
+/* ---------------- entities: 3D kits ---------------- */
+const KS = 1.15;                       // global kit world scale
+const KIT_SC = { rug: 1.25, engine: 1.3, atm: 1.15, cone: 1.1, nft: 1.08, monitor: 1.05 };
+
+/* world -> screen, with SC and shake baked in (same mapping the quads use) */
+function pushK(name, wx, wy, sx, sy, rot, tint, boost) {
+  const k = KITS[name];
+  if (!k) return;
+  k.push((wx - camX) * SC + shakeX, -(GROUND + wy * SC + shakeY),
+    (sx === undefined ? 1 : sx) * KS * SC, (sy === undefined ? sx : sy) * KS * SC, rot, tint, boost);
+}
+
 function drawEnemy(e, t) {
   const bob = Math.sin(t * 2.4 + e.ph) * 4;
   const shs = clamp(1 - (-e.y) / 400, 0.35, 1);
@@ -2461,10 +2994,9 @@ function drawEnemy(e, t) {
     e.r * 1.9 * shs, 11, 0, [0.23, 0.14, 0.25], 0.26);
   let sx = 1, sy = 1;
   if (e.spawn > 0) { const k = 1 + e.spawn * 0.6; sx = k; sy = 1 / k; }
-  const rot = Math.sin(t * 1.7 + e.ph) * 0.07;
-  const sp = SPR[e.m.art];
-  pushW(1, false, e.m.art, e.x, e.y + bob, sp.w * sx, sp.h * sy, rot, WHITE, 1);
-  if (e.hit > 0) pushW(1, true, e.m.art, e.x, e.y + bob, sp.w * sx, sp.h * sy, rot, tint('#fff2a8'), 0.9);
+  const rot = e.fly ? Math.sin(t * 2.1 + e.ph) * 0.16 : Math.sin(t * 1.7 + e.ph) * 0.07;
+  const hot = e.hit > 0;
+  pushK(e.m.art, e.x, e.y + bob, sx, sy, rot, hot ? '#ffd166' : null, hot ? 2.3 : 1);
   const hpMax = e.m.hp || 1;
   if (hpMax > 1) {
     const f = clamp(e.hp / hpMax, 0, 1);
@@ -2476,126 +3008,131 @@ function drawEnemy(e, t) {
     if (lbl) { const l = SPR[lbl]; pushW(2, false, lbl, e.x, e.y + bob - e.r - 26, l.w, l.h, 0, WHITE, 1); }
   }
 }
+
 function drawBlockObj(b, t) {
   pushW(0, false, 'shadow', camX + (b.x - b.w * 0.6) / SC, 3 / SC, b.w * 1.2, 10, 0, [0.23, 0.14, 0.25], 0.24);
+  const ks = KIT_SC[b.kind] || 1;
   if (b.kind === 'saw') {
-    const f = Math.floor(t * 6 * 8 / TAU) % 8;
-    pushW(1, false, 'b_saw' + f, b.x + b.w / 2, -b.h * 0.42, 80, 80, 0, WHITE, 1);
-    pushW(1, false, 'b_mount', b.x + b.w * 0.34, 0, 34, 28, 0, WHITE, 1);
+    pushK('b_saw', b.x + b.w / 2, -b.h * 0.44, ks, ks, t * 5.4, null, 1);
+    pushK('b_mount', b.x + b.w * 0.34, -b.h * 0.10, 1, 1, 0, null, 1);
     return;
   }
-  const key = 'b_' + b.kind, sp = SPR[key];
-  if (sp) pushW(1, false, key, b.x, 0, sp.w, sp.h, 0, WHITE, 1);
+  pushK('b_' + b.kind, b.x, -b.h * 0.44, ks, ks, 0, null, 1);
 }
+
 function drawPickup(p, t) {
   const bob = Math.sin(t * 2.6 + p.ph) * 5;
   if (p.kind === 'weapon') {
-    const sp = 'cr_' + p.wpn;
     wq('glow', p.x, p.y + bob, 2.6, 0, tint('#ffe27a'), 0.4, true);
-    wq(sp, p.x, p.y + bob, 1, Math.sin(t * 1.6 + p.ph) * 0.1, WHITE, 1);
+    pushK('cr_' + p.wpn, p.x, p.y + bob, 1, 1, Math.sin(t * 1.6 + p.ph) * 0.1, null, 1);
     return;
   }
   const name = p.kind === 'aura' ? 'pk_coin' : p.kind === 'gem' ? 'pk_gem' : p.kind === 'heart' ? 'pk_heart'
     : p.kind === 'bag' ? 'pk_bag' : p.kind === 'diamond' ? 'pk_diamond' : p.kind === 'advisory' ? 'pk_advisory' : 'pk_lever';
   const gl = { aura: '#ffd166', gem: '#ff9dbd', heart: '#ff5d73', bag: '#ffd166', diamond: '#8fd6ff', advisory: '#ffe27a', lever: '#ff5d73' }[p.kind];
   wq('glow', p.x, p.y + bob, p.kind === 'aura' ? 1.2 : 2.4, 0, tint(gl), p.kind === 'aura' ? 0.35 : 0.5, true);
-  let sx = 1;
-  if (p.kind === 'aura') sx = Math.max(0.18, Math.abs(Math.cos(t * 3 + p.ph)));
+  const sx = p.kind === 'aura' ? Math.max(0.18, Math.abs(Math.cos(t * 3 + p.ph))) : 1;
   const k = p.kind === 'heart' ? 1 + Math.sin(t * 6 + p.ph) * 0.1 : 1;
-  wqr(name, p.x, p.y + bob, SPR[name].w * sx * k, SPR[name].h * k,
-    p.kind === 'gem' ? Math.sin(t * 1.4 + p.ph) * 0.15 : 0, WHITE, 1);
+  pushK(name, p.x, p.y + bob, sx * k, k,
+    p.kind === 'gem' ? Math.sin(t * 1.4 + p.ph) * 0.15 : 0, null, 1);
 }
+
 function drawBullet(b) {
   const ang = Math.atan2(b.vy, b.vx);
   const add = b.kind === 'laser' || b.kind === 'bolt' || b.kind === 'pump' || b.kind === 'lever' || b.kind === 'coin';
   const name = 'bl_' + (b.kind === 'bolt' ? 'bolt' : b.kind);
-  const sp = SPR[name];
-  if (!sp) return;
-  if (b.kind === 'bread') wq(name, b.x, b.y, 1, Math.sin(bgT * 14 + b.seed) * 0.35, WHITE, 1);
-  else if (b.kind === 'crew') wq(name, b.x, b.y, 1, ang, tint(b.col || '#ff5d73'), 1);
-  else if (b.kind === 'orb') {
+  if (b.kind === 'bread') pushK(name, b.x, b.y, 1, 1, Math.sin(bgT * 14 + b.seed) * 0.35, null, 1);
+  else if (b.kind === 'crew') {
+    pushK(name, b.x, b.y, 1, 1, ang - Math.PI / 2, b.col, 1.3);
+    wq('glow', b.x, b.y, 1.1, 0, tint(b.col || '#ff5d73'), 0.35, true);
+  } else if (b.kind === 'orb') {
     wq('glow', b.x, b.y, 1.9, 0, tint('#a05ae0'), 0.7, true);
-    wq(name, b.x, b.y, 1, ang + Math.sin(bgT * 3 + b.seed) * 0.2, WHITE, 1);
+    pushK(name, b.x, b.y, 1, 1, ang + Math.sin(bgT * 3 + b.seed) * 0.2, null, 1);
   } else if (b.kind === 'rocket') {
     wq('glow', b.x, b.y, 1.7, ang, tint('#ff9040'), 0.7, true);
-    wq(name, b.x, b.y, 1, ang, WHITE, 1);
+    pushK(name, b.x, b.y, 1, 1, ang - Math.PI / 2, null, 1);
   } else if (b.kind === 'pump') {
     const g = 1 + Math.min(1.8, (1.3 - b.life) * 1.4);
     wq('glow', b.x, b.y, 2.1 * g, 0, tint('#ff9dbd'), 0.6, true);
-    wq(name, b.x, b.y, g, ang, WHITE, 1);
+    pushK(name, b.x, b.y, g, g, ang - Math.PI / 2, null, 1);
   } else {
-    wq(name, b.x, b.y, 1, ang, WHITE, 1, add);
-    wq('glow', b.x, b.y, 0.9, ang, tint('#ffffff'), 0.55, true);
+    if (add) wq('glow', b.x, b.y, 0.9, ang, tint('#ffffff'), 0.5, true);
+    pushK(name, b.x, b.y, 1, 1, b.kind === 'down' ? 0 : ang - Math.PI / 2, null, 1);
   }
 }
+
 function drawEBullet(b, t) {
   const name = b.kind === 'down' ? 'bl_down' : b.kind === 'mid' ? 'bl_mid' : b.kind === 'rekt' ? 'bl_rekt' : 'bl_heart';
-  wq(name, b.x, b.y, 1, Math.sin(t * 8 + b.seed) * 0.25, WHITE, 1);
+  pushK(name, b.x, b.y, 1, 1, Math.sin(t * 8 + b.seed) * 0.25 + (b.kind === 'down' ? 0 : -Math.PI / 2), null, 1);
 }
+
 function drawHole(h, t) {
   const k = clamp(h.life / h.max, 0, 1);
-  const rr2 = h.r * (0.6 + 0.4 * Math.sin(k * Math.PI));
-  wq('glow', h.x, h.y, rr2 * 0.34, 0, tint('#a05ae0'), 0.6 * k, true);
-  wq('holering', h.x, h.y, rr2 / 40, t * 2.2, WHITE, 0.85 * k);
-  wq('hole', h.x, h.y, rr2 * 0.72 / 24, 0, WHITE, k);
+  const rr2 = h.r * (0.6 + 0.4 * Math.sin(k * Math.PI)) / 26;
+  wq('glow', h.x, h.y, rr2 * 1.6, 0, tint('#a05ae0'), 0.6 * k, true);
+  pushK('hole', h.x, h.y, rr2, rr2, 0, null, 1);
+  pushK('holering', h.x, h.y, rr2 * 1.5, rr2 * 1.5, t * 2.2, null, k);
 }
+
 function drawPlayerQuad(t) {
   const p = player;
   const airH = Math.max(0, -R - p.y);
   const shs = clamp(1 - airH / 260, 0.4, 1);
   pushW(0, false, 'shadow', camX + (p.x - R * 1.15 * shs) / SC, (gravDir > 0 ? 2 : CEIL) / SC,
     R * 2.3 * shs, 12 * shs, 0, [0.23, 0.14, 0.25], 0.28 * shs);
-  let frame;
-  if (state === 'dying') frame = 'pd';
-  else if (p.blink > 0.02) frame = p.blink > 0.4 ? 'pb0' : 'pb1';
-  else if (muzzle > 0) frame = 'ps' + (Math.floor(runPhase / (TAU / 12)) % 12);
-  else if (!p.grounded) frame = 'pa' + clamp(Math.round((p.vy / 900 + 1) * 1.5), 0, 3);
-  else frame = 'p' + (Math.floor(runPhase / (TAU / 12)) % 12);
-  const tilt = clamp(p.vy / 1600, -0.14, 0.2);
-  const sq2 = p.squash;
-  const alpha = (invuln > 0 && Math.floor(invuln * 14) % 2 === 0) ? 0.35 : 1;
-  pushW(1, false, frame, p.x, p.y, PBOX[2] * (1 + sq2 * 0.5), PBOX[3] * (1 - sq2 * 0.5),
-    tilt + (gravDir < 0 ? 0 : 0), WHITE, alpha);
-  if (gravDir < 0) pushW(1, false, frame, p.x, p.y + R * 2, PBOX[2], PBOX[3], 0, WHITE, 0);
-  // gun
+  const flick = invuln > 0 && Math.floor(invuln * 14) % 2 === 0 ? 0.42 : 1;
+  const bob = Math.sin(runPhase * 2) * 2.4;
+  const tilt = clamp(p.vy / 1600, -0.16, 0.22);
+  const sq = p.squash;
+  const spin = state === 'dying' ? deathSpin : 0;
+  const PKS = 1.28;
+  const psx = (1 + sq * 0.45) * KS * PKS, psy = (1 - sq * 0.45) * KS * PKS;
+  /* legs trail the run cycle: swing in screen Z, lift on the back stroke */
+  for (let i = 0; i < 2; i++) {
+    const ph = runPhase + i * Math.PI;
+    const sw = Math.sin(ph) * 0.62 + spin;
+    const lift = Math.max(0, Math.cos(ph)) * 7;
+    pushK('pl_leg', p.x + Math.sin(ph) * 8, p.y + 4 - lift, PKS, PKS, sw, i ? '#ffc4d6' : null, flick);
+  }
+  pushK('pl_body', p.x, p.y + bob + 4, psx, psy, tilt + spin, null, flick);
+  pushK('pl_head', p.x + 1, p.y + R * 1.05 + bob * 1.4, psx, psy, tilt * 0.55 + spin, null, flick);
   const rec = recoil * 6;
-  const gx = p.x + R * 0.6 - rec, gy = p.y + R * 0.06;
-  const grot = -0.06 + p.aim * 0.12;
-  wq('g_' + gunKind, gx, gy, 1, grot, WHITE, alpha);
+  const grot = -0.06 + p.aim * 0.12 + spin;
+  pushK('pl_arm', p.x + R * 0.2 - rec * 0.6, p.y + R * 0.16 + bob, PKS, PKS, -0.42 + Math.sin(runPhase) * 0.3 + spin, null, flick);
+  pushK('g_' + gunKind, p.x + R * 0.72 - rec, p.y + R * 0.1 + bob, PKS, PKS, grot, null, flick);
   if (muzzle > 0) {
     const m = muzzle / 0.09;
-    pushW(1, true, 'flash', gx, gy, 68 * m, 68 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
+    pushW(1, true, 'flash', p.x + R * 0.86 - rec, p.y + R * 0.1 + bob, 68 * m, 68 * m, grot + (p.phFlash || 0), tint('#fff6c8'), 0.95 * m);
   }
   if (shield > 0) {
     wq('glow', p.x, p.y, 3.4, 0, tint('#8fd6ff'), 0.45 + Math.sin(t * 6) * 0.1, true);
-    wq('pk_diamond', p.x + R * 1.1, p.y - R * 0.9, 0.7, t * 1.2, WHITE, 0.9);
+    pushK('pk_diamond', p.x + R * 1.1, p.y - R * 0.9, 0.8, 0.8, t * 1.2, null, 1);
   }
 }
+
 function drawBossQuad(t) {
   const b = boss;
   if (!b) return;
   const kind = b.kind === 1 ? 1 : 0;
   const by = b.y + Math.sin(t * 1.7) * 10;
-  const s = b.hitFx > 0 ? 1.06 : 1;
   const k = 1 + b.enter * 0.8;
-  wq('glow', b.x, by, 6 * s, 0, tint(kind ? '#6fb7ff' : '#ff5d73'), 0.4, true);
-  const base = kind ? 184 : 172, bh = kind ? 204 : 236;
-  pushW(1, false, 'boss' + kind, b.x, by, base * s * k, bh * s / k, 0, WHITE, 1);
-  if (b.hitFx > 0) pushW(1, true, 'boss' + kind, b.x, by, base * s * k, bh * s / k, 0, tint('#ff8888'), 0.5);
+  const hot = b.hitFx > 0;
+  const BS = 1.55;                                   // the algorithm towers over the feed
+  wq('glow', b.x, by, 6 * (1 + b.enter), 0, tint(kind ? '#6fb7ff' : '#ff5d73'), 0.4, true);
+  pushK('boss' + kind, b.x, by, k * BS, 1 / k * BS, 0, hot ? '#ff8888' : null, hot ? 2.1 : 1);
   const blink = Math.sin(t * 1.1) > 0.95 ? 0.14 : 1;
   const look = Math.sin(t * 1.6) * 10;
-  const ebase = kind ? 72 : 88, eh = kind ? 60 : 68;
-  pushW(1, false, 'boseye' + kind, b.x + look, by - 22, ebase, eh * blink, 0, WHITE, 1);
+  pushK('boss_eye', b.x + look, by - 20 * BS, BS, BS * blink, 0, hot ? '#ff8888' : null, hot ? 2 : 1);
   for (let i = 0; i < (QUAL.lab ? 5 : 3); i++) {
     const a = t * 0.9 + (i / 5) * TAU;
-    pushW(1, false, 'badge' + i, b.x + Math.cos(a) * 96, by + Math.sin(a) * 62 - 6, 36, 32, 0, WHITE, 1);
+    pushK('boss_badge' + i, b.x + Math.cos(a) * 104, by + Math.sin(a) * 70 - 6, BS * 0.95, BS * 0.95, a * 0.6, null, 1);
   }
-  // loading bar on the screen
   const pr = clamp(b.hp / b.maxHp, 0, 1);
-  pushW(1, false, 'px', b.x - 40, by + 34, 80, 12, 0, [0.12, 0.05, 0.2], 1);
-  if (pr > 0) pushW(1, false, 'px', b.x - 40, by + 34, 80 * pr, 12, 0,
+  pushW(1, false, 'px', b.x - 46, by + 52, 92, 14, 0, [0.12, 0.05, 0.2], 1);
+  if (pr > 0) pushW(1, false, 'px', b.x - 46, by + 52, 92 * pr, 14, 0,
     tint(pr > 0.5 ? '#7fd3a8' : pr > 0.22 ? '#ffd166' : '#ff5d73'), 1);
 }
+
 function drawPartsQ() {
   for (const p of parts) {
     const k = 1 - p.life / p.max;
@@ -2651,6 +3188,34 @@ function drawOverlayFx(t) {
       const yy = (i * 26 + (bgT * 260) % 26) % H;
       s8('scan', 0, yy, W, 10, 0, tint('#7ff0a8'), 0.06 * scanT);
     }
+  }
+}
+
+/* dev-only: sheet preview through the real render path (dev.gallery / dev.galleryOff).
+   Names are matched against baked sprites first, then kits. */
+let GAL = null;
+function drawGallery() {
+  if (!GAL) return;
+  const { names, cols, rows, scale } = GAL;
+  const cw = W / cols, ch = (H - 12) / rows;
+  GAL.layout = [];
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i], sp = SPR[name], kit = KITS[name];
+    const c = i % cols, r = (i / cols) | 0;
+    const x = c * cw + cw / 2, y = r * ch + ch / 2;
+    pushW(0, false, 'px', x, y, cw - 6, ch - 6, 0, [0.10, 0.10, 0.16], 1);
+    if (sp) {
+      const sc = Math.min((cw - 20) / sp.w, (ch - 20) / sp.h, scale || 3) * GAL.zoom;
+      pushW(0, false, 'px', x, y, sp.w * sc, sp.h * sc, 0, [1, 0, 1], 0.55);
+      pushS(sp.page, false, name, x, y, sp.w * sc, sp.h * sc, 0, WHITE, 1);
+      GAL.layout.push({ name, x, y, w: sp.w * sc, h: sp.h * sc, box: [sp.w, sp.h], page: sp.page });
+    } else if (kit) {
+      const sc = Math.min((cw - 16) / kit.w, (ch - 16) / kit.h, 6) * GAL.zoom;
+      pushW(0, false, 'px', x, y, kit.w * sc, kit.h * sc, 0, [1, 0, 1], 0.55);
+      const s2 = sc * KS * SC;
+      kit.push(x, -y, s2, s2, 0, null, 1);   /* grid space == screen space here */
+      GAL.layout.push({ name, x, y, w: kit.w * sc, h: kit.h * sc, box: [Math.round(kit.w), Math.round(kit.h)], kit: true });
+    } else GAL.layout.push({ name, missing: true });
   }
 }
 
@@ -3736,6 +4301,7 @@ function perf(rawMs) {
 let last = performance.now();
 function frame(now) {
   const t0 = performance.now();
+  kitBeginAll();
   const rawMs = Math.min(Math.max(now - last, 1), 250);
   let dt = Math.min((now - last) / 1000, 1 / 30);
   last = now;
@@ -3782,8 +4348,10 @@ function frame(now) {
   drawRingsQ();
   drawFgLayer(bgT);
   drawOverlayFx(bgT);
+  drawGallery();
 
   for (const k of keys) { BATCH[k][0].end(); BATCH[k][1].end(); }
+  kitEndAll();
   renderer.render(scene, camera);
 
   syncBanner(); syncToast(); syncBossBar(); syncTape(dt);
@@ -3814,10 +4382,14 @@ window.MEMERUN = {
     lvl: QUAL.lvl, dpr: DPR, frameMs: +frameMs.toFixed(2), fpsWin: +fpsWin.toFixed(2),
     draws: renderer.info.render.calls, tris: renderer.info.render.triangles,
     geo: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
-    spr: Object.keys(SPR).length, canvas: cv.width + 'x' + cv.height
+    spr: Object.keys(SPR).length, kits: Object.keys(KITS).length,
+    kitN: Object.keys(KITS).reduce((a, k) => a + KITS[k].n, 0),
+    kitDraws: Object.keys(KITS).filter(k => KITS[k].n).length,
+    canvas: cv.width + 'x' + cv.height
   }),
   env: () => ({ W, H, SC, GROUND, DPR, camX, shakeX, shakeY }),
   sprites: () => SPR,
+  kits: () => KITS,
   start: () => startGame(),
   quality: q => applyQuality(q)
 };
@@ -3846,6 +4418,17 @@ window.MEMERUN.dev = {
   quality: q => applyQuality(q),
   hurtFx: () => { hurtFx = 1; shake = 14; },
   die: () => { state = 'over'; showOver(); },
+  atlasCanvas: n => AT[n] ? AT[n].cv : null,
+  gallery: (names, cols, rows, zoom) => {
+    GAL = { names, cols: cols || 7, rows: rows || 5, zoom: zoom || 1, scale: 4 };
+    return GAL;
+  },
+  galleryOff: () => { GAL = null; },
+  layout: () => (GAL && GAL.layout) || [],
+  spritesOn: pg => Object.keys(SPR).filter(k => SPR[k].page === pg),
+  kitNames: () => Object.keys(KITS),
+  kitDrop: () => Object.keys(KITS).filter(k => KITS[k].drop).map(k => k + ':' + KITS[k].drop),
+  _g: { THREE, PRIM, TILT, partGeo, buildKitGeo, mergeGeos, B, S, E, CP, CY, CN, RG, OC, HX, PR, P, col, bandOf, TILT, LIGHT },
   distance: m => { player.x = m * 60; camX = player.x - W * 0.30 / SC; nextX = player.x + 400; }
 };
 

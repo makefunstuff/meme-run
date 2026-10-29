@@ -44,18 +44,26 @@ Score is **PNL**, shown as `$` in the HUD, paid out as a **WAGMI BAG** on death.
 
 ## Rendering
 
-Everything is drawn by **three.js in one orthographic camera** as instanced textured quads:
+**The cast is 3D primitives, the world is baked pixels, one orthographic camera looks at both.**
 
-- All art is vector-drawn on a 2D canvas **once at boot** and baked into three atlases
-  (world 2048×3072, entities 2048×4096, text 2048×1024). Nothing is rasterised per frame.
-- One instanced quad mesh per atlas page, one material for normal blending and one for additive
-  (glow) — a full frame is **5 draw calls** and ~2k triangles with ~900 sprites on screen.
-- The old build spent most of a frame in canvas-2D `createRadialGradient`, `shadowBlur`,
-  `drop-shadow` and full-screen fills; those are now baked pixels, and the per-frame cost is
-  ~1–2 ms of JS at 1080p with a chaos load.
-- **DPR is capped** (1.5 high / 1.25 mid / 1.0 low) and an **auto governor** watches the real
-  frame interval: over 33 ms for three half-second windows drops quality a notch, under 20 ms
-  for ~12 s lifts it back. `AUTO GPU` is the default; force `HIGH`/`LOW` in the menu or with `Q`.
+- Player, every meme, every bullet, pickup, obstacle and the boss are built from boxes,
+  icosahedra, capsules, cylinders and cones. Under the orthographic camera a part seen face-on is a
+  flat shape — circle, square, triangle — while the extruded sides read as volume, so it looks 2D
+  without ever drawing a 2D sprite at runtime.
+- Shading is baked into vertex colours as **three flat cel bands** from a fixed light direction, and
+  every part carries an inflated ink-coloured shell, so silhouettes get a solid cartoon outline.
+  A kit's triangles are ordered shell-first, body-after: that is a painter's algorithm for a sticker,
+  which is why the renderer needs no depth buffer at all.
+- One kit type = one `InstancedMesh` = one draw call (~93 kit types, ~65 of them live in a chaos
+  frame). Tint is per instance (hit flash blows the band colours out), opacity is per kit
+  (invulnerability flicker).
+- The parallax world, clouds, sun, particles, glow, shadows, muzzle flash and label chips are still
+  vector-drawn once at boot into atlases. The old build spent most of a frame in canvas-2D
+  `createRadialGradient`, `shadowBlur`, `drop-shadow` and full-screen repaints; those are baked
+  pixels now, and the per-frame cost is ~2–5 ms of JS at 1080p with a chaos load.
+- **DPR is capped** (1.5 high / 1.25 mid / 1.0 low) and an **auto governor** watches the real frame
+  interval: over 33 ms for three half-second windows drops quality a notch, under 20 ms for ~12 s
+  lifts it back. `AUTO GPU` is the default; force `HIGH`/`LOW` in the menu or with `Q`.
 
 ## Build
 
@@ -70,8 +78,11 @@ python3 -m http.server 8767   # then open http://127.0.0.1:8767/
 
 ## Dev hooks
 
-`window.MEMERUN` is telemetry (`stats()`, `env()`, `sprites()`, `quality('low'|'mid'|'high')`),
-`window.MEMERUN.dev` is for tuning and screenshots (`mode`, `event`, `boss`, `bossKill`,
-`weapon`, `pickup`, `meme`, `hole`, `hurtFx`, `die`, `distance`). Nothing in the game calls them.
+`window.MEMERUN` is telemetry (`stats()` — including `kits`, `kitN`, `kitDraws`, `draws`, `tris`,
+`frameMs` — plus `env()`, `sprites()`, `kits()`, `quality('low'|'mid'|'high')`).
+`window.MEMERUN.dev` is for tuning and screenshots (`mode`, `event`, `boss`, `bossKill`, `weapon`,
+`pickup`, `meme`, `hole`, `hurtFx`, `die`, `distance`, `quality`, `gallery`, `layout`, `kitNames`,
+`kitDrop`, `atlasCanvas`, `_g`). `dev.gallery(names)` draws any kit or sprite through the real
+render path in a labelled grid — that is how the cast gets reviewed. Nothing in the game calls them.
 
 PNL is fictional. So is the market. Do not send money to `$MOON`.
