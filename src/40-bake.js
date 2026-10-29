@@ -135,12 +135,25 @@ const O = o => Object.assign({ s: S }, o || {});
   ['#ff5d73', '#ffd166', '#fff', '#c9a8e8', '#7ff0a8'].forEach((col, i) => B.add('fl' + i, [-8, -8, 16, 16], () => bakeFlower(col), { s: 1.5 }));
   for (let i = 0; i < 3; i++) B.add('bg' + i, [-9, -12, 18, 24], () => bakeBling(i), { s: 1.5 });
   SKIES.forEach((stops, i) => {
-    B.add('sky' + i, [0, 0, 8, 512], () => {
-      const q = ctx.createLinearGradient(0, 0, 0, 512);
+    B.add('sky' + i, [0, 0, 8, 1024], () => {
+      const q = ctx.createLinearGradient(0, 0, 0, 1024);
       for (const s of stops) q.addColorStop(s[1], s[0]);
-      ctx.fillStyle = q; ctx.fillRect(0, 0, 8, 512);
+      ctx.fillStyle = q; ctx.fillRect(0, 0, 8, 1024);
     }, { s: 1 });
   });
+  /* the horizon haze: the band the ground is seated in, and the bottom of the
+     screen falling into shadow */
+  B.add('haze', [0, 0, 16, 128], () => {
+    const q = ctx.createLinearGradient(0, 128, 0, 0);
+    q.addColorStop(0, 'rgba(255,255,255,0.95)'); q.addColorStop(0.45, 'rgba(255,255,255,0.42)');
+    q.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = q; ctx.fillRect(0, 0, 16, 128);
+  }, { s: 1 });
+  B.add('vigb', [0, 0, 16, 128], () => {
+    const q = ctx.createLinearGradient(0, 0, 0, 128);
+    q.addColorStop(0, 'rgba(14,7,20,0)'); q.addColorStop(1, 'rgba(14,7,20,0.55)');
+    ctx.fillStyle = q; ctx.fillRect(0, 0, 16, 128);
+  }, { s: 1 });
   B.add('vig', [0, 0, 256, 256], () => {
     const q = ctx.createRadialGradient(128, 128, 40, 128, 128, 128);
     q.addColorStop(0, 'rgba(60,20,50,0)');
@@ -182,15 +195,15 @@ function labelSprite(label) {
   let cached = textCache.get('l|' + label);
   if (cached) return cached;
   const T = AT.text, c = T.c;
-  c.font = '600 11px Fredoka, ui-rounded, sans-serif';
-  const w = Math.ceil(c.measureText(label).width) + 22, h = 20;
+  c.font = '700 10px Fredoka, ui-rounded, sans-serif';
+  const w = Math.ceil(c.measureText(label).width) + 17, h = 16;
   const nm = 'lbl' + textCache.size;
   const s = T.add(nm, [-w / 2, -h / 2, w, h], () => {
     rrPath(-w / 2, -h / 2, w, h, h / 2);
-    sticker('rgba(255,252,250,0.95)', { pad: 3, lw: 1.4 });
-    ctx.font = '600 11px Fredoka, ui-rounded, sans-serif';
+    sticker('rgba(255,252,250,0.9)', { pad: 2.4, lw: 1.2 });
+    ctx.font = '700 10px Fredoka, ui-rounded, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#8a5f76'; ctx.fillText(label, 0, 0);
+    ctx.fillStyle = '#6b4560'; ctx.fillText(label, 0, 0.5);
   }, { s: 1 });
   if (s) { textCache.set('l|' + label, nm); return nm; }
   return null;

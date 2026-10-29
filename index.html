@@ -3,203 +3,286 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#0b1a12">
+<meta name="theme-color" content="#120a18">
 <title>MEME RUN — degen edition (three.js)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Lilita+One&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
+/* ============================================================
+   Art direction for the chrome: one dark glass panel system, mint as the
+   signal colour, gold as the money colour, red as the loss colour. Every
+   number is monospaced and tabular so the HUD never jitters when it ticks.
+   ============================================================ */
+:root{
+  --ink:#150c1c; --glass:rgba(20,10,27,.72); --glass2:rgba(26,14,34,.94);
+  --line:rgba(127,240,168,.34); --line2:rgba(127,240,168,.16);
+  --mint:#7ff0a8; --mintD:#16a34a; --gold:#ffe27a; --red:#ff5d73; --pink:#ff9dbd;
+  --txt:#f0f7f2; --dim:#a8bfb2;
+  --mono:"Space Mono",ui-monospace,monospace;
+  --disp:LilitaOne,Fredoka,ui-rounded,sans-serif;
+  --heart:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E")
+}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:#120a16}
-body{
-  font-family:Fredoka,ui-rounded,"Trebuchet MS",system-ui,sans-serif;
-  color:#3a2340;touch-action:none;
-  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
-}
+body{font-family:Fredoka,ui-rounded,"Trebuchet MS",system-ui,sans-serif;color:var(--txt);
+  touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
 
 /* ---------- HUD ---------- */
 #hud{position:fixed;inset:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) auto max(12px,env(safe-area-inset-left));
   display:flex;justify-content:space-between;align-items:flex-start;gap:10px;pointer-events:none;z-index:6}
-#logo{font-family:LilitaOne,Fredoka,sans-serif;font-size:clamp(19px,4.4vw,28px);line-height:.9;letter-spacing:.02em;
-  color:#fff;text-shadow:0 2px 0 #16a34a,0 4px 12px rgba(0,0,0,.55)}
-#logo em{font-style:normal;color:#7ff0a8}
-#logo b{display:block;font-family:"Space Mono",monospace;font-size:9px;letter-spacing:.22em;color:#ffe27a;text-shadow:0 1px 0 rgba(0,0,0,.6)}
-#combo{margin-top:4px;height:16px;font-family:"Space Mono",monospace;font-size:12px;font-weight:700;letter-spacing:.14em;
-  color:#0b1a12;background:#7ff0a8;border-radius:6px;padding:2px 7px;display:inline-block;opacity:0;transition:opacity .18s}
+.hudL{display:flex;flex-direction:column;gap:5px;min-width:0}
+#logo{font-family:var(--disp);font-size:clamp(20px,4.4vw,27px);line-height:.92;letter-spacing:.01em;color:#fff;
+  text-shadow:0 2px 0 var(--mintD),0 3px 0 #083d20,0 8px 18px rgba(0,0,0,.55)}
+#logo em{font-style:normal;color:var(--mint)}
+#tagline{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.2em;color:var(--gold);
+  text-shadow:0 1px 2px rgba(0,0,0,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+#combo{height:19px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;color:#08240f;
+  background:linear-gradient(180deg,#a8f7c6,var(--mint));border-radius:7px;padding:3px 8px;display:inline-block;
+  width:max-content;opacity:0;transition:opacity .16s;box-shadow:0 3px 0 rgba(6,50,24,.7)}
 #combo.on{opacity:1}
-#combo.pop{animation:pop .28s cubic-bezier(.2,1.7,.4,1)}
-@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
-#stats{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.stat{padding:5px 10px 4px;border-radius:12px;background:rgba(11,26,18,.82);border:1.5px solid rgba(127,240,168,.65);text-align:center;line-height:1}
-.stat span{display:block;font-family:"Space Mono",monospace;font-size:8px;font-weight:700;letter-spacing:.16em;color:#7ff0a8;margin-bottom:2px}
-.stat b{font-size:15px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-family:"Space Mono",monospace}
-.stat.up b{color:#7ff0a8}.stat.down b{color:#ff6b8a}
-#hearts{display:flex;gap:3px;padding:8px 10px}
-#hearts i{width:13px;height:13px;display:block;background:#ff5d73;
-  clip-path:path("M6.5 12.6C1 9 .2 5.4 2.3 3.4 4 1.7 6 2.7 6.5 4 7 2.7 9 1.7 10.7 3.4 12.8 5.4 12 9 6.5 12.6Z")}
-#hearts i.off{background:#4a3550}
+#combo.pop{animation:pop .26s cubic-bezier(.2,1.7,.4,1)}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.28)}100%{transform:scale(1)}}
+
+/* one panel, divided cells — the HUD is an instrument strip, not a bag of chips */
+#stats{display:flex;align-items:stretch;background:var(--glass);border:1px solid var(--line);border-radius:13px;
+  box-shadow:0 10px 26px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.07);backdrop-filter:blur(7px) saturate(1.15);
+  -webkit-backdrop-filter:blur(7px) saturate(1.15);overflow:hidden}
+.cell{padding:6px 11px 7px;display:flex;flex-direction:column;gap:2px;align-items:center;min-width:52px}
+.cell+.cell{border-left:1px solid var(--line2)}
+.cell span{font-family:var(--mono);font-size:7.5px;font-weight:700;letter-spacing:.18em;color:rgba(127,240,168,.75)}
+.cell b{font-family:var(--mono);font-size:14px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1.1}
+.cell.hero{background:linear-gradient(180deg,rgba(127,240,168,.10),rgba(127,240,168,.02));min-width:88px}
+.cell.hero b{font-size:19px}
+.cell.hero span{display:flex;align-items:center;gap:4px}
+.delta{font-style:normal;font-size:9px;line-height:1;color:transparent}
+.delta.up{color:var(--mint)}.delta.dn{color:var(--red)}
+.delta.flash{animation:tick .5s ease-out}
+@keyframes tick{0%{transform:translateY(2px) scale(1.5)}100%{transform:none;scale:1}}
+.hero.up b{color:var(--mint)}.hero.down b{color:#ffd0dd}
+#hearts{flex-direction:row;gap:4px;align-items:center;padding:0 12px}
+#hearts i{width:14px;height:14px;display:block;background:var(--red);
+  -webkit-mask:var(--heart) center/contain no-repeat;mask:var(--heart) center/contain no-repeat;
+  filter:drop-shadow(0 1px 0 rgba(0,0,0,.5))}
+#hearts i.off{background:#5a4758;opacity:.75}
+#wpnChip b{font-size:12px;letter-spacing:.06em}
+
 #lever{position:fixed;left:50%;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);z-index:6;pointer-events:none;
-  font-family:"Space Mono",monospace;font-size:11px;font-weight:700;letter-spacing:.2em;color:#0b1a12;background:#ffe27a;
-  padding:4px 10px 3px;border-radius:999px;opacity:0;transition:opacity .2s}
-#lever.on{opacity:1}
+  font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.14em;color:#2a1c00;
+  background:linear-gradient(180deg,#fff0b0,var(--gold));padding:5px 12px 4px;border-radius:999px;
+  box-shadow:0 4px 0 rgba(90,60,0,.45),0 8px 20px rgba(0,0,0,.4);opacity:0;transition:opacity .18s}
+#lever.on{opacity:1;animation:pop .3s cubic-bezier(.2,1.7,.4,1)}
 
 /* ---------- ticker tape ---------- */
-#ticker{position:fixed;left:0;right:0;bottom:0;height:26px;z-index:5;pointer-events:none;overflow:hidden;
-  background:linear-gradient(180deg,rgba(11,26,18,0),rgba(11,26,18,.92));
-  border-top:1px solid rgba(127,240,168,.35)}
-#tape{display:flex;gap:26px;white-space:nowrap;position:absolute;top:6px;left:0;will-change:transform;
-  font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.08em;color:#cfe9d8}
+#ticker{position:fixed;left:0;right:0;bottom:0;height:28px;z-index:5;pointer-events:none;overflow:hidden;
+  display:flex;align-items:center;
+  background:linear-gradient(180deg,rgba(18,9,24,0),rgba(18,9,24,.88) 40%,rgba(14,7,20,.97));
+  border-top:1px solid var(--line2)}
+#ticker .tag{flex:none;margin-left:10px;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.2em;
+  color:#08240f;background:var(--mint);border-radius:4px;padding:2px 5px;box-shadow:0 0 12px rgba(127,240,168,.4)}
+#tape{display:flex;gap:22px;white-space:nowrap;position:absolute;top:7px;left:84px;will-change:transform;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:#cfe9d8;
+  animation:tape 52s linear infinite}
+@keyframes tape{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){#tape{animation:none}}
 #tape i{font-style:normal}
-#tape i.up{color:#7ff0a8}#tape i.dn{color:#ff6b8a}#tape i.mu{color:#ffe27a}
+#tape i.up{color:var(--mint)}#tape i.dn{color:var(--red)}#tape i.mu{color:rgba(207,233,216,.5)}
 
 /* ---------- banner / toast / boss bar ---------- */
-#banner{position:fixed;left:50%;top:26%;transform:translate(-50%,-50%) rotate(-2deg);z-index:7;pointer-events:none;
-  min-width:min(560px,88vw);text-align:center;padding:14px 22px 16px;border-radius:20px;
-  background:rgba(20,8,26,.92);border:3px solid #fff;box-shadow:0 12px 30px rgba(0,0,0,.45);opacity:0;transition:opacity .18s}
-#banner.on{opacity:1}
-#banner b{display:block;font-family:LilitaOne,Fredoka,sans-serif;font-size:clamp(22px,5.6vw,32px);color:#ffe27a;
-  text-shadow:0 2px 0 #e8618c,0 6px 14px rgba(0,0,0,.5);letter-spacing:.01em}
-#banner i{display:block;font-style:normal;font-size:12.5px;color:#ffd9e8;margin-top:4px}
-#toast{position:fixed;left:50%;top:max(58px,10%);transform:translateX(-50%);z-index:7;pointer-events:none;max-width:min(420px,86vw);
-  padding:10px 18px 9px;border-radius:16px;background:rgba(255,252,250,.96);border:2px solid #fff;
-  box-shadow:0 8px 20px rgba(0,0,0,.3);font-size:13px;color:#6d4a60;text-align:center;opacity:0;transition:opacity .22s,transform .22s}
-#toast.on{opacity:1}
-#bossbar{position:fixed;left:50%;top:92px;transform:translateX(-50%);width:min(520px,calc(100vw - 40px));z-index:6;pointer-events:none;
-  height:30px;border-radius:15px;background:rgba(20,8,26,.86);border:2px solid #fff;opacity:0;transition:opacity .25s}
+#banner{position:fixed;left:50%;top:24%;transform:translate(-50%,-50%) skewX(-9deg);z-index:7;pointer-events:none;
+  min-width:min(520px,84vw);max-width:92vw;text-align:center;padding:12px 26px 14px;border-radius:6px;
+  background:linear-gradient(180deg,rgba(38,16,48,.94),rgba(18,8,24,.94));
+  border:1px solid rgba(255,255,255,.22);border-left:5px solid var(--gold);border-right:5px solid var(--mint);
+  box-shadow:0 18px 44px rgba(0,0,0,.5);opacity:0;transition:opacity .16s,transform .22s cubic-bezier(.2,1.4,.4,1)}
+#banner.on{opacity:1;transform:translate(-50%,-50%) skewX(-9deg) scale(1)}
+#banner>*{display:block;transform:skewX(9deg)}
+#banner b{font-family:var(--disp);font-size:clamp(21px,5.2vw,30px);color:#fff;letter-spacing:.02em;
+  text-shadow:0 2px 0 var(--pink),0 4px 0 rgba(0,0,0,.35),0 10px 22px rgba(0,0,0,.5)}
+#banner i{font-style:normal;font-size:12px;color:var(--gold);margin-top:3px;letter-spacing:.06em}
+#toast{position:fixed;left:50%;top:max(62px,10%);transform:translateX(-50%) translateY(-6px);z-index:7;pointer-events:none;
+  max-width:min(440px,86vw);padding:9px 16px 9px 14px;border-radius:11px;background:rgba(24,13,32,.9);
+  border:1px solid var(--line);box-shadow:0 10px 26px rgba(0,0,0,.45);font-size:12.5px;color:#e6f3ea;text-align:center;
+  opacity:0;transition:opacity .2s,transform .2s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#toast::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;background:var(--mint)}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#bossbar{position:fixed;left:50%;top:116px;transform:translateX(-50%);width:min(520px,calc(100vw - 40px));z-index:6;
+  pointer-events:none;padding:4px;border-radius:12px;background:rgba(16,8,22,.82);border:1px solid rgba(255,255,255,.18);
+  box-shadow:0 10px 26px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.08);opacity:0;transition:opacity .25s;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #bossbar.on{opacity:1}
-#bossfill{height:20px;margin:3px 5px;border-radius:11px;background:#ff5d73;width:100%;transition:width .12s linear}
-#bossbar span{position:absolute;left:0;right:0;top:7px;text-align:center;font-family:"Space Mono",monospace;
-  font-size:11px;font-weight:700;letter-spacing:.22em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7)}
-#fps{position:fixed;right:12px;bottom:32px;z-index:8;pointer-events:none;font-family:"Space Mono",monospace;font-size:11px;
-  color:#7ff0a8;background:rgba(11,26,18,.7);border:1px solid rgba(127,240,168,.4);padding:3px 7px;border-radius:8px;display:none}
+.btrack{position:relative;height:16px;border-radius:8px;background:rgba(255,255,255,.08);overflow:hidden}
+#bossfill{height:100%;border-radius:8px;width:100%;transition:width .12s linear;
+  background:linear-gradient(180deg,#ff9ab0,var(--red) 55%,#c9366f);box-shadow:0 0 14px rgba(255,93,115,.55)}
+#bossbar span{display:block;text-align:center;font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.26em;color:#fff;margin:4px 0 1px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#fps{position:fixed;right:12px;bottom:34px;z-index:8;pointer-events:none;font-family:var(--mono);font-size:10.5px;
+  color:var(--mint);background:rgba(12,6,18,.78);border:1px solid var(--line);padding:3px 8px;border-radius:8px;display:none}
 #fps.on{display:block}
 
 /* ---------- screens ---------- */
-.screen{position:fixed;inset:0;display:grid;place-items:center;padding:18px;z-index:20;overflow:auto;
-  background:linear-gradient(180deg,rgba(12,6,18,.55) 0%,rgba(30,10,40,.72) 100%)}
+.screen{position:fixed;inset:0;display:grid;place-items:center;padding:16px;z-index:20;overflow:auto;
+  background:radial-gradient(120% 90% at 50% 34%,rgba(30,14,40,.5) 0%,rgba(12,6,18,.82) 70%,rgba(8,4,12,.94) 100%);
+  backdrop-filter:blur(5px) saturate(1.1);-webkit-backdrop-filter:blur(5px) saturate(1.1)}
 .screen.hidden{display:none}
-.card{width:min(560px,100%);padding:clamp(20px,5.4vw,32px);border-radius:26px;text-align:center;
-  background:linear-gradient(178deg,#fffaf9 0%,#f2fff6 55%,#e9ffef 100%);
-  border:2.5px solid #fff;box-shadow:0 20px 46px rgba(0,0,0,.45);
-  animation:rise .38s cubic-bezier(.2,1.1,.3,1)}
-@keyframes rise{from{transform:translateY(16px) scale(.97);opacity:0}to{transform:none;opacity:1}}
-.badge{display:inline-block;padding:5px 13px;border-radius:999px;background:#0b1a12;color:#7ff0a8;
-  font-family:"Space Mono",monospace;font-size:9.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px}
-.badge.dead{background:#8c2b45;color:#ffd7e2}
-h1{font-family:LilitaOne,Fredoka,sans-serif;font-size:clamp(36px,9.6vw,64px);line-height:.84;letter-spacing:.01em;
-  color:#0b1a12;text-shadow:0 3px 0 #7ff0a8,0 6px 0 #16a34a}
-h1 span{color:#16a34a}
-.sub{margin:12px auto 4px;max-width:38ch;font-size:clamp(12.5px,3.2vw,14.5px);line-height:1.5;color:#3f5a4a}
-.chips{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin:12px 0 14px}
-.chips span{padding:4px 9px;border-radius:999px;background:rgba(11,26,18,.9);font-family:"Space Mono",monospace;
-  font-size:9px;font-weight:700;letter-spacing:.1em;color:#7ff0a8}
-.btn{cursor:pointer;font-family:inherit;font-size:clamp(13px,3.4vw,16px);font-weight:700;letter-spacing:.1em;
-  text-transform:uppercase;color:#eafff2;padding:14px 26px;border-radius:999px;border:2.5px solid #0b1a12;
-  background:linear-gradient(180deg,#37d67a,#0f7a3f);box-shadow:0 7px 0 #073a1f;
-  transition:transform .07s,box-shadow .07s}
-.btn:hover{filter:brightness(1.07)}
-.btn:active{transform:translateY(5px);box-shadow:0 2px 0 #073a1f}
-.hint{margin-top:14px;font-size:11px;line-height:1.8;color:#5b7566}
-.hint b{color:#0b1a12;background:rgba(11,26,18,.1);border:1px solid rgba(11,26,18,.25);border-radius:6px;padding:1px 6px;font-weight:700}
-.modes{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:2px 0 12px}
-.modes button{cursor:pointer;font-family:"Space Mono",monospace;font-size:10px;font-weight:700;letter-spacing:.11em;
-  padding:7px 10px 6px;border-radius:12px;border:2px solid rgba(11,26,18,.2);background:rgba(11,26,18,.06);
-  color:#26543a;transition:transform .08s,background .12s,color .12s}
-.modes button small{display:block;font-size:7px;letter-spacing:.06em;opacity:.8;margin-top:2px;font-weight:700}
-.modes button.on{background:#0b1a12;border-color:#0b1a12;color:#7ff0a8}
-.modes button:active{transform:scale(.94)}
-.qual{display:flex;gap:5px;justify-content:center;margin:-4px 0 12px}
-.qual button{cursor:pointer;font-family:"Space Mono",monospace;font-size:9px;font-weight:700;letter-spacing:.12em;
-  padding:5px 9px;border-radius:999px;border:1.5px solid rgba(11,26,18,.22);background:transparent;color:#4d6b58}
-.qual button.on{background:#16a34a;border-color:#16a34a;color:#eafff2}
-.best{margin:2px 0 10px;font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.16em;color:#4d6b58;font-weight:700}
-.best b{color:#0f7a3f;font-size:13px}
-.final{margin:8px 0 2px;font-family:LilitaOne,Fredoka,sans-serif;font-size:clamp(40px,12vw,68px);line-height:1;
-  color:#0f7a3f;font-variant-numeric:tabular-nums;text-shadow:0 3px 0 #b9efce}
-.final.dn{color:#c9366f;text-shadow:0 3px 0 #ffb3cc}
-.runstats{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0 6px}
-.runstats div{padding:7px 12px;border-radius:14px;background:rgba(11,26,18,.07);border:1.5px solid rgba(11,26,18,.16);min-width:82px}
-.runstats span{display:block;font-family:"Space Mono",monospace;font-size:8px;letter-spacing:.14em;color:#4d6b58;font-weight:700}
-.runstats b{font-size:15px;color:#0b1a12;font-variant-numeric:tabular-nums;font-family:"Space Mono",monospace}
-.fineprint{margin-top:10px;font-family:"Space Mono",monospace;font-size:8.5px;letter-spacing:.06em;color:#7d9688}
+.card{position:relative;width:min(620px,100%);padding:clamp(18px,4.4vw,28px) clamp(16px,4.4vw,30px) clamp(14px,3.6vw,20px);
+  border-radius:20px;text-align:center;color:var(--txt);
+  background:linear-gradient(172deg,rgba(34,17,44,.96),rgba(19,10,26,.97));
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 26px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.09);
+  animation:rise .34s cubic-bezier(.2,1.1,.3,1)}
+.card::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;border-radius:20px 20px 0 0;
+  background:linear-gradient(90deg,var(--mint),var(--gold) 45%,var(--pink) 70%,var(--mint))}
+@keyframes rise{from{transform:translateY(14px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;
+  background:rgba(127,240,168,.10);border:1px solid var(--line);color:var(--mint);
+  font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase}
+.eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px var(--mint);
+  animation:blink 1.6s infinite}
+.eyebrow.dead{background:rgba(255,93,115,.12);border-color:rgba(255,93,115,.5);color:#ffb3c2}
+.eyebrow.dead i{background:var(--red);box-shadow:0 0 8px var(--red)}
+@keyframes blink{0%,60%{opacity:1}80%{opacity:.25}}
+h1{font-family:var(--disp);font-size:clamp(34px,8.8vw,58px);line-height:.92;letter-spacing:.01em;color:#fff;margin:10px 0 6px;
+  text-shadow:0 3px 0 var(--mintD),0 6px 0 #06301a,0 14px 26px rgba(0,0,0,.5)}
+h1 span{color:var(--mint)}
+.sub{margin:0 auto 4px;max-width:44ch;font-size:clamp(12px,3vw,14px);line-height:1.5;color:#c6d8cc}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:14px 0 12px}
+.modes{display:contents}
+.grid button,.grid .qcell{cursor:pointer;text-align:left;font-family:var(--mono);font-weight:700;letter-spacing:.08em;
+  padding:9px 10px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.045);
+  color:#d7e8dc;transition:transform .08s,background .14s,border-color .14s,color .14s}
+.grid button small{display:block;font-size:8px;letter-spacing:.05em;font-weight:700;opacity:.62;margin-top:3px;line-height:1.3}
+.grid button:hover{background:rgba(127,240,168,.10);border-color:var(--line)}
+.grid button.on{background:linear-gradient(180deg,rgba(127,240,168,.24),rgba(22,163,74,.18));
+  border-color:var(--mint);color:#fff;box-shadow:0 0 0 1px rgba(127,240,168,.25),0 6px 18px rgba(0,0,0,.35)}
+.grid button.on small{color:var(--mint);opacity:.9}
+.grid button:active{transform:scale(.97)}
+.qcell{cursor:default;display:flex;flex-direction:column;gap:6px;justify-content:center;background:rgba(255,255,255,.03)}
+.qcell small{font-size:8px;letter-spacing:.2em;color:rgba(127,240,168,.8);font-weight:700;font-family:var(--mono)}
+.qrow{display:flex;gap:4px}
+.qrow button{cursor:pointer;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.1em;padding:4px 7px;
+  border-radius:7px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#b9cdbf;transition:.14s}
+.qrow button.on{background:var(--mintD);border-color:var(--mint);color:#eafff2}
+.best{margin:0 0 12px;font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--dim);font-weight:700}
+.best b{color:var(--gold);font-size:13px;letter-spacing:.04em}
+.btn{cursor:pointer;font-family:inherit;font-size:clamp(13px,3.3vw,16px);font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:#062110;padding:13px 26px;border-radius:12px;border:0;
+  background:linear-gradient(180deg,#9df5bd,#22c06a 55%,#12904a);
+  box-shadow:0 6px 0 #06301c,0 14px 30px rgba(22,163,74,.35);transition:transform .07s,box-shadow .07s,filter .12s}
+.btn:hover{filter:brightness(1.06)}
+.btn:active{transform:translateY(4px);box-shadow:0 2px 0 #06301c,0 8px 18px rgba(22,163,74,.3)}
+.keys{margin-top:12px;font-size:10.5px;line-height:2;color:#9fb6a8}
+.keys b{font-family:var(--mono);font-size:9px;color:#e8f5ec;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.16);border-bottom-width:2px;border-radius:5px;padding:2px 6px;font-weight:700}
+.fineprint{margin-top:9px;font-family:var(--mono);font-size:8px;letter-spacing:.06em;color:#6f8679}
+.final{margin:2px 0 10px;font-family:var(--disp);font-size:clamp(38px,11vw,62px);line-height:1;color:var(--mint);
+  font-variant-numeric:tabular-nums;text-shadow:0 3px 0 #06301c,0 12px 26px rgba(0,0,0,.45)}
+.final.dn{color:var(--red);text-shadow:0 3px 0 #3d0d1e,0 12px 26px rgba(0,0,0,.45)}
+.ledger{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:2px 0 12px}
+.ledger div{padding:8px 6px;border-radius:10px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09)}
+.ledger span{display:block;font-family:var(--mono);font-size:7.5px;letter-spacing:.14em;color:rgba(127,240,168,.72);font-weight:700}
+.ledger b{font-family:var(--mono);font-size:15px;color:#fff;font-variant-numeric:tabular-nums}
+.record{margin:6px 0 10px;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.16em;color:#2a1c00;
+  background:linear-gradient(180deg,#fff0b0,var(--gold));border-radius:8px;padding:6px 10px;
+  box-shadow:0 4px 0 rgba(90,60,0,.4)}
 
 /* ---------- touch pad ---------- */
-#pad{position:fixed;left:0;right:0;bottom:30px;display:none;justify-content:space-between;align-items:flex-end;
+#pad{position:fixed;left:0;right:0;bottom:34px;display:none;justify-content:space-between;align-items:flex-end;
   padding:0 max(16px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-right));
   z-index:9;pointer-events:none}
-.pbtn{pointer-events:auto;width:clamp(84px,26vw,116px);height:clamp(84px,26vw,116px);border-radius:50%;
-  font-family:inherit;font-size:clamp(12px,3vw,15px);font-weight:700;letter-spacing:.1em;color:#0b1a12;
-  border:3px solid #fff;touch-action:none;position:relative}
-.pbtn.jump{background:radial-gradient(circle at 35% 28%,#fff,#ffd3e2 60%,#ff9dbd);box-shadow:0 7px 0 #d4708f}
-.pbtn.shoot{background:radial-gradient(circle at 35% 28%,#fff,#c9f5db 58%,#37d67a);color:#0b2a17;box-shadow:0 7px 0 #0f7a3f}
-.pbtn:active,.pbtn.down{transform:translateY(5px);filter:brightness(1.06)}
+.pbtn{pointer-events:auto;width:clamp(86px,26vw,116px);height:clamp(86px,26vw,116px);border-radius:50%;
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.14em;color:#08240f;
+  border:1px solid rgba(255,255,255,.35);touch-action:none;position:relative;
+  box-shadow:0 8px 22px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.4)}
+.pbtn.jump{background:radial-gradient(circle at 34% 26%,#fff,#ffd3e2 55%,#ff9dbd)}
+.pbtn.shoot{background:radial-gradient(circle at 34% 26%,#fff,#b9f0cf 55%,#37d67a)}
+.pbtn:active,.pbtn.down{transform:translateY(4px) scale(.98);filter:brightness(1.05);border-color:var(--mint)}
 @media (pointer:coarse),(max-width:820px){#pad.on{display:flex}}
+@media (pointer:coarse){.keys .kbdrow{display:none}}
+@media (max-width:560px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #tagline{max-width:38vw}
+  .cell{min-width:44px;padding:5px 8px 6px}
+  .cell.hero b{font-size:16px}
+}
+/* the instrument strip must never run off a phone: shed the least useful cells */
+@media (max-width:700px){
+  #wpnChip{display:none}
+  #tagline{display:none}
+  .cell{min-width:40px;padding:5px 8px 6px}
+}
+@media (max-width:430px){
+  #logo{font-size:17px}
+  .cell{min-width:34px;padding:4px 7px 5px;gap:1px}
+  .cell b{font-size:12px}.cell.hero b{font-size:15px}
+  #stats{border-radius:11px}
+}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
 <div id="hud">
-  <div>
-    <div id="logo">MEME<em>RUN</em><b id="tagline">DEGEN EDITION · NOT FINANCIAL ADVICE</b></div>
+  <div class="hudL">
+    <div id="logo">MEME<em>RUN</em></div>
+    <div id="tagline">DEGEN EDITION · NOT FINANCIAL ADVICE</div>
     <div id="combo"></div>
   </div>
   <div id="stats">
-    <div class="stat" id="plChip"><span>P&amp;L</span><b id="score">$0</b></div>
-    <div class="stat"><span>METRES</span><b id="dist">0</b></div>
-    <div class="stat"><span>BAG</span><b id="bag">0</b></div>
-    <div class="stat" id="hearts"></div>
-    <div class="stat" id="wpnChip"><span>WEAPON</span><b id="wpn">BLASTER</b></div>
+    <div class="cell hero" id="plChip"><span>P&amp;L <i class="delta" id="plDelta"></i></span><b id="score">$0</b></div>
+    <div class="cell"><span>METRES</span><b id="dist">0</b></div>
+    <div class="cell"><span>BAG</span><b id="bag">0</b></div>
+    <div class="cell" id="hearts"></div>
+    <div class="cell" id="wpnChip"><span>WEAPON</span><b id="wpn">BLASTER</b></div>
   </div>
 </div>
 <div id="lever">×2 P&amp;L</div>
-<div id="ticker"><div id="tape"></div></div>
+<div id="ticker"><span class="tag">LIVE</span><div id="tape"></div></div>
 <div id="banner"><b id="bannerT"></b><i id="bannerL"></i></div>
 <div id="toast"></div>
-<div id="bossbar"><div id="bossfill"></div><span id="bossName">THE ALGORITHM</span></div>
+<div id="bossbar"><div class="btrack"><div id="bossfill"></div></div><span id="bossName">THE ALGORITHM</span></div>
 <div id="fps">—</div>
 
 <div id="menu" class="screen">
   <div class="card">
-    <div class="badge">endless brainrot · degen edition</div>
+    <div class="eyebrow"><i></i>endless brainrot · degen edition</div>
     <h1>MEME<span>RUN</span></h1>
     <p class="sub">The Algorithm is chasing you and the market is open. Outrun the feed, shoot the memes, buy the dip, leave the meeting with the bag.</p>
-    <div class="modes" id="modes">
-      <button data-mode="classic" class="on">CLASSIC<small>the standard doomscroll</small></button>
-      <button data-mode="degen">DEGEN<small>the market is open</small></button>
-      <button data-mode="chaos">CHAOS<small>everything is too much</small></button>
-      <button data-mode="ohio">OHIO<small>physics is a lie</small></button>
-      <button data-mode="zen">ZEN<small>no thoughts, no death</small></button>
-    </div>
-    <div class="qual" id="qual">
-      <button data-q="auto" class="on">AUTO GPU</button>
-      <button data-q="high">HIGH</button>
-      <button data-q="low">LOW</button>
+    <div class="grid">
+      <div class="modes" id="modes">
+        <button data-mode="classic" class="on">CLASSIC<small>the standard doomscroll</small></button>
+        <button data-mode="degen">DEGEN<small>market open · ×2 P&amp;L</small></button>
+        <button data-mode="chaos">CHAOS<small>everything is too much</small></button>
+        <button data-mode="ohio">OHIO<small>physics is a lie</small></button>
+        <button data-mode="zen">ZEN<small>no thoughts, no death</small></button>
+      </div>
+      <div class="qcell" id="qual">
+        <small>GPU</small>
+        <div class="qrow"><button data-q="auto" class="on">AUTO</button><button data-q="high">HIGH</button><button data-q="low">LOW</button></div>
+      </div>
     </div>
     <div class="best" id="best">BEST <b>$0</b></div>
-    <div class="chips"><span>$PEPE</span><span>$SHIB</span><span>$WIF</span><span>$BONK</span><span>WHALE</span><span>DIAMOND HANDS</span><span>RUG PULL</span><span>THE ALGORITHM</span></div>
     <button id="playBtn" class="btn">Open the position</button>
-    <p class="hint"><b>SPACE</b> jump · <b>F</b> shoot · <b>V</b> fps meter<br>phone: tap left half to jump, hold right half to shoot</p>
+    <p class="keys"><span class="kbdrow"><b>SPACE</b> jump · <b>F</b> shoot · <b>V</b> fps meter · <b>Q</b> gpu quality</span><br>phone: tap the left half to jump, hold the right half to shoot</p>
     <p class="fineprint">P&amp;L is fictional. So is the market. Do not send money to $MOON.</p>
   </div>
 </div>
 
 <div id="over" class="screen hidden">
   <div class="card">
-    <div class="badge dead" id="overBadge">position liquidated</div>
+    <div class="eyebrow dead"><i></i><span id="overBadge">position liquidated</span></div>
     <h1 id="overTitle">GET<span>REKT</span></h1>
     <div class="final" id="finalScore">$0</div>
-    <div class="runstats">
+    <div class="ledger">
       <div><span>METRES</span><b id="rDist">0</b></div>
       <div><span>MEMES KILLED</span><b id="rKills">0</b></div>
       <div><span>BEST WAGMI</span><b id="rCombo">0</b></div>
       <div><span>BAG</span><b id="rBag">0</b></div>
     </div>
     <p class="sub" id="deathMsg"></p>
-    <div class="best" id="newRecord" style="display:none;color:#c9366f">★ NEW ALL-TIME HIGH ★ THE WHALE IS IMPRESSED ★</div>
+    <div class="record" id="newRecord" style="display:none">★ NEW ALL-TIME HIGH · THE WHALE IS IMPRESSED ★</div>
     <button id="againBtn" class="btn">Reopen the position</button>
-    <p class="hint"><b>SPACE</b> to rebuy the top</p>
+    <p class="keys"><b>SPACE</b> to rebuy the top</p>
   </div>
 </div>
 
@@ -443,10 +526,13 @@ class Quads {
 
 /* ---------------- renderer / camera ---------------- */
 const cv = document.getElementById('game');
+/* antialias is not optional here: the cast is geometry, and a hard pixel edge
+   on every primitive silhouette is the difference between toys and clipping. */
 const renderer = new THREE.WebGLRenderer({ canvas: cv,
-  alpha: false, antialias: false, powerPreference: 'high-performance', stencil: false, depth: false
+  alpha: false, antialias: true, powerPreference: 'high-performance', stencil: false, depth: false
 });
 renderer.autoClear = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 let W = 0, H = 0, DPR = 1, SC = 1, GROUND = 0;
 const camera = new THREE.OrthographicCamera(0, 1, 0, -1, -2000, 2000);
@@ -459,52 +545,153 @@ function camSetup() {
 
 /* =========================================================================
    3D KIT LAYER
-   The cast is built from primitives (boxes, icosahedra, capsules, cylinders,
-   cones) rendered through the same orthographic camera: a part seen face-on is
-   a flat shape — circle, square, triangle — while the extruded sides read as
-   volume. Shading is baked into vertex colours as three flat cel bands, and
-   every part carries an inflated ink-coloured shell, so silhouettes get a solid
-   cartoon outline.
+   The cast is built from primitives rendered through the orthographic camera:
+   a part seen face-on is a flat shape — circle, square, pill — while the
+   extruded sides read as volume.
+   The primitives are *pillow* shapes: a rounded box and a smooth sphere, both
+   generated from an icosphere with analytic smooth normals, so parts read as
+   injection-moulded plastic toys rather than faceted rocks.
+   Shading is baked into vertex colours as four cel bands from a fixed key
+   light, with a cool fill on the shadow side, contact darkening toward the
+   bottom of every part and a rim highlight on the edge away from the key.
+   Every part carries an inflated ink-coloured shell (the cartoon outline);
+   tiny face features opt out of it with `ink: 0` so eyes and glints stay crisp.
    No depth buffer: each kit is one merged geometry with triangles ordered
    shell-first, body-after, which is a painter's algorithm for a sticker.
    One kit type = one InstancedMesh = one draw call.
    ========================================================================= */
 
-const BAND = [1.34, 1.0, 0.62];             // lit / base / shade
-const INKHEX = '#22131f';
 const ZAXIS = new THREE.Vector3(0, 0, 1);
 const WHITE3 = [1, 1, 1];
 /* Fixed world tilt, baked in at build time so the top and one side of every
    volume are visible. The game only ever rotates kits in screen Z. */
-const TILT = new THREE.Matrix4().makeRotationX(-0.30).multiply(new THREE.Matrix4().makeRotationY(0.40));
-const LIGHT = new THREE.Vector3(-0.30, 0.78, 0.78).normalize();
+const TILT = new THREE.Matrix4().makeRotationX(-0.26).multiply(new THREE.Matrix4().makeRotationY(0.34));
+const INKHEX = '#1d1120';
 const INKC = new THREE.Color(INKHEX);
+const LIGHT = new THREE.Vector3(-0.46, 0.70, 0.55).normalize();   // key, upper-left-front
+const RIM = new THREE.Vector3(0.78, 0.24, 0.42).normalize();      // rim, lower-right-front
+
+/* per-channel band multipliers: a warm key, a neutral mid, a cool fill so the
+   shadow side keeps colour instead of turning to mud, and a deep band for the
+   underside. All are >0 multipliers on the part's base colour. */
+const B_LIT = [1.40, 1.30, 1.11];
+const B_MID = [1.03, 1.01, 1.00];
+const B_SH = [0.85, 0.91, 1.10];
+const B_DEEP = [0.70, 0.76, 0.98];
+const RIM_T = [1.06, 1.12, 1.26];
+const RIM_K = 0.40;
 
 function col(hex, k) { const c = new THREE.Color(hex); return [c.r * k, c.g * k, c.b * k]; }
-function bandOf(nx, ny, nz) {
-  const l = nx * LIGHT.x + ny * LIGHT.y + nz * LIGHT.z;
-  return l > 0.72 ? BAND[0] : l > 0.30 ? BAND[1] : BAND[2];
+
+/* cel band + contact darkening + rim, as a per-channel multiplier */
+const _mul = [0, 0, 0];
+function bandOf(nx, ny, nz, vY) {
+  const key = nx * LIGHT.x + ny * LIGHT.y + nz * LIGHT.z;
+  const m = key > 0.62 ? B_LIT : key > 0.20 ? B_MID : key > -0.18 ? B_SH : B_DEEP;
+  const ao = 1 - 0.16 * (0.5 - (vY || 0));            // vY: part-local -0.5..0.5
+  const r = Math.max(0, (nx * RIM.x + ny * RIM.y + nz * RIM.z) - 0.52) / 0.48;
+  const s = r * r * RIM_K;
+  _mul[0] = m[0] * ao + s * RIM_T[0];
+  _mul[1] = m[1] * ao + s * RIM_T[1];
+  _mul[2] = m[2] * ao + s * RIM_T[2];
+  return _mul;
 }
 
-/* Low-poly primitives, faceted on purpose. */
-const PRIM = {
-  box: () => new THREE.BoxGeometry(1, 1, 1),
-  sph: () => new THREE.IcosahedronGeometry(0.5, 1),
-  sphLo: () => new THREE.IcosahedronGeometry(0.5, 0),      // shells and small parts
-  cap: () => new THREE.CapsuleGeometry(0.5, 1, 3, 7),
-  cyl: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 9, 1, false),
-  cone: () => new THREE.ConeGeometry(0.5, 1, 9),
-  pri: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 3, 1, false),
-  oct: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, false),
-  hex: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false),
-  ring: () => new THREE.TorusGeometry(0.4, 0.11, 4, 9),
-  quad: () => new THREE.PlaneGeometry(1, 1)
-};
+/* ---- primitives -------------------------------------------------------
+   Every primitive is generated in unit space (x,y,z in -0.5..0.5 for boxes
+   and spheres) with analytic smooth normals, so shading is soft and the
+   silhouette is round. detail is chosen from the part's on-screen size. */
 
-/* part helpers so the cast tables stay readable */
+/* pillow box: the icosphere direction d maps to the offset surface of the core
+   box (half-extent 0.5 - r) inflated by r. n = d, so every face is smooth. */
+function pillowGeo(detail, r) {
+  const g = new THREE.IcosahedronGeometry(0.5, detail);
+  const p = g.attributes.position.array;
+  const n = new Float32Array(p.length);
+  const k = 0.5 - r;
+  for (let i = 0; i < p.length; i += 3) {
+    const x = p[i], y = p[i + 1], z = p[i + 2];
+    const L = Math.max(Math.abs(x), Math.abs(y), Math.abs(z)) || 1e-6;
+    const d = Math.sqrt(x * x + y * y + z * z) || 1e-6;
+    const ux = (x / L) * k, uy = (y / L) * k, uz = (z / L) * k;
+    const s = r / d;
+    p[i] = ux + x * s; p[i + 1] = uy + y * s; p[i + 2] = uz + z * s;
+    n[i] = x / d; n[i + 1] = y / d; n[i + 2] = z / d;
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+  return g;
+}
+function ballGeo(detail) {
+  const g = new THREE.IcosahedronGeometry(0.5, detail);
+  const p = g.attributes.position.array;
+  const n = new Float32Array(p.length);
+  for (let i = 0; i < p.length; i += 3) {
+    const x = p[i], y = p[i + 1], z = p[i + 2];
+    const d = Math.sqrt(x * x + y * y + z * z) || 1e-6;
+    n[i] = x / d; n[i + 1] = y / d; n[i + 2] = z / d;
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+  return g;
+}
+/* smooth capsule (unit: radius 0.5, cylinder length 1, so y spans -1..1) */
+function capsuleGeo(radial, cap) {
+  const g = new THREE.CapsuleGeometry(0.5, 1, cap, radial);
+  const p = g.attributes.position.array;
+  const n = new Float32Array(p.length);
+  for (let i = 0; i < p.length; i += 3) {
+    const x = p[i], y = p[i + 1], z = p[i + 2];
+    const cy = clamp(y, -0.5, 0.5);
+    const dx = x, dy = y - cy, dz = z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
+    n[i] = dx / d; n[i + 1] = dy / d; n[i + 2] = dz / d;
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+  return g;
+}
+/* flat-faceted prism/gem: one normal per triangle */
+function flatGeo(g) {
+  const ni = g.index ? g.toNonIndexed() : g;
+  ni.computeVertexNormals();
+  return ni;
+}
+/* detail ladder: a part of this many world units does not need more faces than
+   it has pixels */
+const detFor = (size, hi, lo) => (size >= 22 ? hi : size >= 11 ? (hi + lo) >> 1 : lo);
+
+/* kind -> unit geometry. `smooth` parts get their normals from the analytic
+   functions above, faceted parts from flat face normals. */
+function primGeo(kind, size) {
+  const d = detFor(size, 2, 0);
+  switch (kind) {
+    case 'box': return pillowGeo(detFor(size, 2, 1), 0.17);
+    case 'bx': return pillowGeo(detFor(size, 2, 1), 0.05);
+    case 'plate': return pillowGeo(detFor(size, 1, 1), 0.10);
+    case 'sph': return ballGeo(detFor(size, 2, 0));
+    case 'ball': return ballGeo(detFor(size, 3, 1));
+    case 'cap': return capsuleGeo(detFor(size, 10, 5), detFor(size, 3, 1));
+    case 'cyl': return new THREE.CylinderGeometry(0.5, 0.5, 1, Math.round(clamp(size * 0.9, 8, 18)), 1, false);
+    case 'cone': return new THREE.ConeGeometry(0.5, 1, Math.round(clamp(size * 0.9, 8, 18)));
+    case 'ring': return new THREE.TorusGeometry(0.4, 0.11, 5, Math.round(clamp(size * 0.7, 8, 16)));
+    case 'pri': return flatGeo(new THREE.CylinderGeometry(0.5, 0.5, 1, 3, 1, false));
+    case 'hex': return flatGeo(new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false));
+    case 'oct': return flatGeo(new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, false));
+    case 'gem': return flatGeo(new THREE.OctahedronGeometry(0.5, 0));
+    case 'quad': return new THREE.PlaneGeometry(1, 1);
+    default: return pillowGeo(1, 0.17);
+  }
+}
+const FACETED = { pri: 1, hex: 1, oct: 1, gem: 1, quad: 1 };
+
+/* ---- part helpers so the cast tables stay readable ----
+   p = primitive key, x/y/z placement, w/h/d size in world units, c base colour.
+   opts: rx/ry/rz rotation, k extra brightness, ink outline pad (0 = no shell),
+   sp spherical shells. */
 const P = (p, x, y, z, w, h, d, c, o) => Object.assign({ p, x, y, z, w, h, d: d === undefined ? w : d, c }, o || {});
 const B = (x, y, z, w, h, d, c, o) => P('box', x, y, z, w, h, d, c, o);
+const BX = (x, y, z, w, h, d, c, o) => P('bx', x, y, z, w, h, d, c, o);
+const PL = (x, y, z, w, h, d, c, o) => P('plate', x, y, z, w, h, d, c, o);
 const S = (x, y, z, r, c, o) => P('sph', x, y, z, r, r, r, c, o);
+const BA = (x, y, z, r, c, o) => P('ball', x, y, z, r, r, r, c, o);
 const E = (x, y, z, w, h, c, o) => P('sph', x, y, z, w, h, w * 0.7, c, o);
 const CP = (x, y, z, w, h, c, o) => P('cap', x, y, z, w, h, w, c, o);
 const CY = (x, y, z, r, h, c, o) => P('cyl', x, y, z, r * 2, h, r * 2, c, o);
@@ -513,56 +700,81 @@ const RG = (x, y, z, r, c, o) => P('ring', x, y, z, r, r, r, c, o);
 const OC = (x, y, z, r, h, c, o) => P('oct', x, y, z, r * 2, h, r * 2, c, o);
 const HX = (x, y, z, r, h, c, o) => P('hex', x, y, z, r * 2, h, r * 2, c, o);
 const PR = (x, y, z, r, h, c, o) => P('pri', x, y, z, r * 2, h, r * 2, c, o);
+const GM = (x, y, z, w, h, d, c, o) => P('gem', x, y, z, w, h, d, c, o);
 const UP = Math.PI / 2;   // lay a cylinder/cone on its side (points along Z)
 
-/* one part -> [shell, body] non-indexed, vertex-coloured */
+/* one part -> [shell, body] non-indexed, vertex-coloured. Shell first so the
+   outline sits behind the body. */
 function partGeo(pt, ink, pad) {
-  /* Shells are pure silhouette, so they get the cheapest primitive; a tiny part
-     does not need a faceted sphere either.
-     Careful: polyhedra (icosahedron, capsule) ship non-indexed and
-     toNonIndexed() then returns the SAME object — cloning keeps shell and body
-     as separate geometries, each transformed exactly once. */
-  const big = Math.max(pt.w, pt.h, pt.d) >= 16;
-  const srcOf = kind => {
-    const g0 = PRIM[kind]();
-    const ni = g0.index ? g0.toNonIndexed() : g0.clone();
-    g0.dispose();
-    return ni;
-  };
-  const bodyKey = (pt.p === 'sph' && !big) ? 'sphLo' : pt.p;
-  const shellKey = pt.p === 'sph' ? 'sphLo' : pt.p;   /* shells keep the part's shape */
-  const size = new THREE.Matrix4().makeScale(pt.w, pt.h, pt.d);
+  const size = Math.max(pt.w, pt.h, pt.d);
+  /* the outline is a line weight, not a fixed plate: scale it with the part so
+     a pupil does not get the same ink as a torso */
+  const thin = Math.min(pt.w, pt.h, pt.d);
+  const pd = pt.ink === 0 ? 0 : pt.ink !== undefined ? pt.ink
+    : clamp(thin * 0.11, 0.75, pad === undefined ? 1.9 : pad);
+
   const rot = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(pt.rx || 0, pt.ry || 0, pt.rz || 0));
-  const M = size.premultiply(rot).premultiply(TILT);
-  const body = srcOf(bodyKey);
-  body.applyMatrix4(M);
-  body.translate(pt.x, pt.y, pt.z);
+  const tiltRot = new THREE.Matrix3().setFromMatrix4(TILT).multiply(new THREE.Matrix3().setFromMatrix4(rot));
+  const base = col(pt.c, 1);
+  const kk = pt.k === undefined ? 1 : pt.k;
 
-  const base = col(pt.c, 1), bc = new Float32Array(body.attributes.position.count * 3), na = body.attributes.normal.array;
-  for (let i = 0; i < body.attributes.position.count; i++) {
-    const k = bandOf(na[i * 3], na[i * 3 + 1], na[i * 3 + 2]) * (pt.k === undefined ? 1 : pt.k);
-    bc[i * 3] = base[0] * k; bc[i * 3 + 1] = base[1] * k; bc[i * 3 + 2] = base[2] * k;
+  const body = primGeo(pt.p, size);
+  const ni = body.index ? body.toNonIndexed() : body;
+  if (body !== ni) body.dispose();
+  const bp = ni.attributes.position.array;
+  const bn = ni.attributes.normal.array;
+  const bc = new Float32Array(bp.length);
+  const M = new THREE.Matrix4().makeScale(pt.w, pt.h, pt.d).premultiply(rot).premultiply(TILT);
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i < bp.length; i += 3) {
+    const px = bp[i], py = bp[i + 1], pz = bp[i + 2];
+    /* analytic smooth normal in unit space, rotated by tilt*rot (no scale) */
+    let nx, ny, nz;
+    if (FACETED[pt.p]) { nx = bn[i]; ny = bn[i + 1]; nz = bn[i + 2]; }
+    else {
+      const d = Math.sqrt(px * px + py * py + pz * pz) || 1e-6;
+      nx = px / d; ny = py / d; nz = pz / d;
+    }
+    tmp.set(nx, ny, nz).applyMatrix3(tiltRot).normalize();
+    const m = bandOf(tmp.x, tmp.y, tmp.z, py);
+    bc[i] = base[0] * m[0] * kk; bc[i + 1] = base[1] * m[1] * kk; bc[i + 2] = base[2] * m[2] * kk;
+    tmp.set(px, py, pz).applyMatrix4(M);
+    bp[i] = tmp.x + pt.x; bp[i + 1] = tmp.y + pt.y; bp[i + 2] = tmp.z + pt.z;
   }
-  body.setAttribute('color', new THREE.BufferAttribute(bc, 3));
+  ni.setAttribute('normal', new THREE.BufferAttribute(bn, 3));
+  ni.setAttribute('color', new THREE.BufferAttribute(bc, 3));
 
-  const shell = srcOf(shellKey);
-  shell.applyMatrix4(new THREE.Matrix4().makeScale(
-    (pt.w + pad * 2) / Math.max(pt.w, 0.01), (pt.h + pad * 2) / Math.max(pt.h, 0.01),
-    (pt.d + pad * 2) / Math.max(pt.d, 0.01)).premultiply(M));
-  shell.translate(pt.x, pt.y, pt.z);
-  const ic = col(pt.ink || ink, 1), sc = new Float32Array(shell.attributes.position.count * 3);
-  for (let i = 0; i < shell.attributes.position.count; i++) { sc[i * 3] = ic[0]; sc[i * 3 + 1] = ic[1]; sc[i * 3 + 2] = ic[2]; }
-  shell.setAttribute('color', new THREE.BufferAttribute(sc, 3));
-  return [shell, body];
+  if (pd <= 0) return [null, ni];
+
+  /* the shell is pure silhouette: same shape, inflated, coarser than the body,
+     one flat ink colour with a soft vertical gradient so the outline is not a
+     dead black band */
+  const shell = primGeo(pt.p, size * 0.45);
+  const si = shell.index ? shell.toNonIndexed() : shell;
+  if (shell !== si) shell.dispose();
+  const sp = si.attributes.position.array;
+  const sc = new Float32Array(sp.length);
+  const MS = new THREE.Matrix4().makeScale(
+    (pt.w + pd * 2) / Math.max(pt.w, 0.01), (pt.h + pd * 2) / Math.max(pt.h, 0.01),
+    (pt.d + pd * 2) / Math.max(pt.d, 0.01)).premultiply(M);
+  for (let i = 0; i < sp.length; i += 3) {
+    tmp.set(sp[i], sp[i + 1], sp[i + 2]).applyMatrix4(MS);
+    sp[i] = tmp.x + pt.x; sp[i + 1] = tmp.y + pt.y; sp[i + 2] = tmp.z + pt.z;
+    const g = 0.86 + 0.30 * (sp[i + 1] / Math.max(pt.h, 1) + 0.5);
+    sc[i] = INKC.r * g; sc[i + 1] = INKC.g * g; sc[i + 2] = INKC.b * g;
+  }
+  si.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+  return [si, ni];
 }
 
 /* concat shell/body pairs in part order = painter's algorithm */
 function mergeGeos(list) {
   let nv = 0;
-  for (const g of list) nv += g.attributes.position.count;
+  for (const g of list) if (g) nv += g.attributes.position.count;
   const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), cr = new Float32Array(nv * 3), idx = new Uint32Array(nv);
   let v = 0;
   for (const g of list) {
+    if (!g) continue;
     const c = g.attributes.position.count;
     pos.set(g.attributes.position.array, v * 3);
     nor.set(g.attributes.normal.array, v * 3);
@@ -575,13 +787,13 @@ function mergeGeos(list) {
   out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   out.setAttribute('color', new THREE.BufferAttribute(cr, 3));
   out.setIndex(new THREE.BufferAttribute(idx, 1));
-  for (const g of list) g.dispose();
+  for (const g of list) if (g) g.dispose();
   return out;
 }
 
 function buildKitGeo(parts, opts) {
   const ink = (opts && opts.ink) || INKHEX;
-  const pad = opts && opts.pad !== undefined ? opts.pad : 2.4;
+  const pad = opts && opts.pad !== undefined ? opts.pad : 1.9;
   const out = [];
   for (const pt of parts) { const g = partGeo(pt, ink, pad); out.push(g[0], g[1]); }
   return mergeGeos(out);
@@ -642,207 +854,307 @@ function kitEndAll() { for (const k in KITS) KITS[k].end(); }
    Local space: x right, y up, z toward the camera. Sizes are world units, the
    same box the baked sprites used (~80x86 for a meme). Order matters: parts
    listed first are painted first, so put the body down before the face.
+   Art direction: one silhouette idea per character, readable at 40px; faces
+   share the eyePair/mouth helpers so the cast looks like one toy line, not a
+   pile of shapes. Face features use `ink: 0` (no outline) to stay crisp.
    ========================================================================= */
 
-const SKIN = '#f0c8a8', SKIN2 = '#e6b48c', DARK = '#22131f', WHITE6 = '#f4f8ff', GREY = '#93a6c0';
+const SKIN = '#f2cda6', SKIN2 = '#e0b088', DARK = '#22131f', WHITE6 = '#f7f9ff', GREY = '#93a6c0';
+const CREAM = '#fdfaf4', SHDW = '#7d8aa0', STEEL = '#c6cede', STEEL2 = '#8e9bb0';
+
+/* ---- shared face furniture ---------------------------------- */
+/* r = eye radius; dx = distance of each eye from x. Everything after the
+   whites is pupil then a single glint, the same three beats for every face. */
+function eyePair(x, y, z, r, o) {
+  o = o || {};
+  const dx = o.dx === undefined ? r * 1.6 : o.dx;
+  const p = o.pupilC || DARK, w = o.white || CREAM, look = o.look || 0.28;
+  const ps = o.ps === undefined ? 0.56 : o.ps;
+  const out = [];
+  for (const s of [-1, 1]) {
+    const ex = x + s * dx;
+    out.push(S(ex, y, z, r * 2, w, { ink: 0.8, k: 1.05 }));
+    out.push(S(ex + look * r, y - r * 0.08, z + r * 1.3, r * 2 * ps, p, { ink: 0 }));
+    out.push(S(ex - r * 0.34, y + r * 0.46, z + r * 1.85, r * 0.9, '#ffffff', { ink: 0, k: 1.6 }));
+  }
+  return out;
+}
+const oneEye = (x, y, z, r, o) => {
+  o = o || {};
+  return [
+    S(x, y, z, r * 2, o.white || CREAM, { ink: 0.9, k: 1.05 }),
+    S(x + r * 0.3, y, z + r * 1.4, r * 1.1, o.pupilC || DARK, { ink: 0 }),
+    S(x - r * 0.4, y + r * 0.5, z + r * 1.9, r * 0.8, '#ffffff', { ink: 0, k: 1.6 })
+  ];
+};
+const mouth = (x, y, z, w, h, c, o) => E(x, y, z, w, h, c || '#8a3a52', Object.assign({ ink: 0.6 }, o || {}));
+const blush = (x, y, z, s, c) => [
+  E(x - s * 1.9, y, z, s * 2.2, s, c || '#ff9dbd', { ink: 0, k: 0.98 }),
+  E(x + s * 1.9, y, z, s * 2.2, s, c || '#ff9dbd', { ink: 0, k: 0.98 })
+];
+/* stubby feet so every ground unit sits in the world */
+const feet = (y, dx, w, c) => [
+  B(-dx, y, 3, w, w * 0.62, w * 1.15, c), B(dx, y, 3, w, w * 0.62, w * 1.15, c)
+];
+const ears = (y, dx, r, h, c) => [CN(-dx, y, 1, r, h, c, { rz: 0.26 }), CN(dx, y, 1, r, h, c, { rz: -0.26 })];
 
 function castMemes() {
-  const crew = c => [
-    B(0, -6, -8, 34, 20, 20, c),                        // backpack
-    CP(-9, -34, 4, 20, 26, c), CP(9, -34, 4, 20, 26, c),
-    CP(0, -8, 0, 46, 54, c),                            // body + head dome
-    B(6, 2, 12, 26, 17, 10, '#bfe6ff'),                 // visor
-    B(14, 3, 16, 9, 9, 6, '#ffffff', { k: 1.15 })
-  ];
-  const dog = (c, snout) => [
-    CN(-17, 14, 2, 11, 20, c), CN(17, 14, 2, 11, 20, c),  // ears
-    S(0, 0, 0, 26, c),                                     // head
-    B(snout ? 12 : 0, -12, 14, snout ? 24 : 18, 16, 16, snout || c),
-    S(-9, 6, 22, 5.5, '#ffffff'), S(9, 6, 22, 5.5, '#ffffff'),
-    S(-9, 6, 25, 2.6, DARK), S(9, 6, 25, 2.6, DARK),
-    B(0, -20, 18, 12, 6, 6, DARK)
-  ];
   const out = {};
 
-  out.m_sus0 = crew('#e0524e');
-  out.m_sus1 = crew('#3f8fd6');
-  out.m_sus2 = crew('#59c98d');
+  /* --- the feed ------------------------------------------------ */
+  const crew = (c, c2) => [
+    B(-17, -4, -14, 15, 26, 16, c2),                        // oxygen tank
+    CP(-10, -34, 2, 13, 13, c), CP(10, -34, 2, 13, 13, c),   // legs
+    CP(0, -2, 0, 44, 34, c),                                 // body, one pill
+    BX(7, 6, 15, 30, 18, 12, '#bfe9ff', { k: 1.06 }),        // visor
+    BX(10, 8, 21, 12, 6, 4, '#ffffff', { ink: 0, k: 1.3 })   // visor glint
+  ];
+  out.m_sus0 = crew('#e2544f', '#a53b39');
+  out.m_sus1 = crew('#3f8fd6', '#2b6ba8');
+  out.m_sus2 = crew('#4fc38a', '#329464');
+
   out.m_npc = [
-    B(0, 4, 0, 46, 44, 26, GREY),
-    B(-9, 12, 16, 8, 8, 6, DARK), B(9, 12, 16, 8, 8, 6, DARK),
-    B(0, -6, 16, 18, 5, 6, DARK),
-    B(-12, -30, 0, 12, 18, 12, '#7c8ea6'), B(12, -30, 0, 12, 18, 12, '#7c8ea6')
+    B(0, 22, 0, 34, 34, 26, GREY),                  // the face of the void
+    ...feet(-17, 11, 13, '#6d7f98'),
+    B(-10, 27, 15, 8, 6, 5, DARK, { ink: 0 }), B(10, 27, 15, 8, 6, 5, DARK, { ink: 0 }),
+    B(0, 17, 15, 14, 3.4, 5, DARK, { ink: 0 }),      // the flat line
+    B(0, 0, 0, 30, 22, 22, '#7f92aa'),               // body
+    B(-9, -14, 14, 12, 3, 4, '#5c6d84', { ink: 0 }), B(9, -14, 14, 12, 3, 4, '#5c6d84', { ink: 0 })
   ];
+
   out.m_toilet = [
-    B(0, 16, -6, 46, 8, 26, '#e8eef6'),
-    B(0, 30, -6, 40, 22, 22, '#e8eef6'),
-    CY(0, -8, 0, 30, 28, '#f7fbff'),
-    B(0, -8, 26, 44, 9, 8, '#dfe7f0'),
-    S(0, 6, 8, 17, SKIN),
-    S(-7, 10, 20, 4.5, '#ffffff'), S(7, 10, 20, 4.5, '#ffffff'),
-    S(-7, 10, 23, 2.2, DARK), S(7, 10, 23, 2.2, DARK),
-    E(0, -2, 20, 16, 8, '#8a4a58')
+    B(0, -28, -4, 38, 18, 26, '#dfe7f2'),            // pedestal
+    CY(0, -12, 0, 27, 15, '#eef3fa'),                // bowl
+    B(0, 2, -12, 44, 24, 24, '#e6ecf5'),             // the tank, behind
+    S(0, 20, 4, 31, SKIN),                           // the head, out of the bowl
+    B(0, 33, 2, 30, 10, 24, '#3b2a34', { rz: 0.06 }),// the hair
+    ...eyePair(0, 22, 16, 5.4, { dx: 9, look: 0.42 }),
+    mouth(0, 9, 18, 22, 11, '#7a2f3c')
   ];
-  out.m_doge = dog('#e8a94b', '#f6d3a0');
-  out.m_shib = dog('#e8b072', '#f8dfb8');
+
+  const doge = (c, snout) => [
+    ...ears(22, 19, 10, 20, c),
+    B(0, 4, 0, 46, 42, 34, c),
+    B(13, -12, 16, 24, 17, 18, snout),
+    ...eyePair(0, 12, 17, 5.2, { dx: 11, look: 0.34 }),
+    S(22, -4, 22, 9, '#3b2530', { ink: 0.7 }),
+    mouth(14, -20, 20, 18, 6, '#7a3540'),
+    ...blush(-2, 2, 18, 4.4)
+  ];
+  out.m_doge = doge('#eaa94b', '#f8dfae');
+  out.m_shib = doge('#d99a55', '#f6e3c0');
+
   out.m_bonk = [
-    ...dog('#e8a94b', '#f6d3a0'),
-    B(20, 22, -6, 14, 52, 14, '#b5773a', { rz: 0.55 }),
-    B(30, 40, -6, 22, 20, 20, '#8f5a2c', { rz: 0.55 })
+    ...doge('#eaa94b', '#f8dfae'),
+    BX(24, 20, -8, 13, 46, 13, '#c08a4a', { rz: 0.5 }),
+    BX(34, 42, -8, 20, 15, 15, '#8f5a2c', { rz: 0.5 })
   ];
+
   out.m_wif = [
-    ...dog('#f2f4f8', '#e8ecf2'),
-    CN(0, 26, 0, 24, 20, '#e0524e', { rx: Math.PI }),
-    B(0, 34, 0, 44, 6, 30, '#c23f3c')
+    ...ears(14, 18, 9, 14, '#f4f6fa'),
+    B(0, 2, 0, 46, 42, 34, '#f4f6fa'),
+    B(13, -14, 16, 24, 17, 18, '#e6ebf3'),
+    CY(0, 27, 0, 18, 8, '#e05a52'),                  // the beanie, worn not swallowed
+    CY(0, 20, 0, 22, 5, '#c94b45'),
+    S(0, 34, 0, 8, '#e05a52'),
+    ...eyePair(0, 10, 17, 5.2, { dx: 11, look: 0.3 }),
+    S(22, -6, 22, 9, '#3b2530', { ink: 0.7 }),
+    mouth(14, -22, 20, 18, 6, '#7a3540')
   ];
+
   out.m_pepe = [
-    B(0, 2, 0, 46, 42, 28, '#69c96a'),
-    E(0, -18, 16, 34, 15, '#c9605f'),
-    S(-11, 14, 20, 7, '#ffffff'), S(11, 14, 20, 7, '#ffffff'),
-    S(-11, 13, 25, 3, DARK), S(11, 13, 25, 3, DARK),
-    B(-9, -32, 0, 12, 14, 12, '#4f9c52'), B(9, -32, 0, 12, 14, 12, '#4f9c52')
+    B(0, 2, 0, 48, 44, 32, '#5ec95f'),
+    B(-10, -30, 0, 13, 16, 13, '#4aa84e'), B(10, -30, 0, 13, 16, 13, '#4aa84e'),
+    E(0, -14, 16, 36, 15, '#d1605c', { ink: 1.4 }),   // the lips
+    E(0, -12, 20, 26, 8, '#a8424a', { ink: 0 }),
+    S(-13, 20, 14, 16, '#7ddb7e', { ink: 0.9 }), S(13, 20, 14, 16, '#7ddb7e', { ink: 0.9 }),
+    ...eyePair(0, 21, 21, 5.2, { dx: 13, look: 0.36 }),
+    S(-5, 4, 24, 3.6, '#2f6e33', { ink: 0 }), S(5, 4, 24, 3.6, '#2f6e33', { ink: 0 })
   ];
+
   out.m_brain = [
-    B(0, 0, 0, 46, 42, 30, '#ff9dbd'),
-    S(-14, 24, 6, 9, '#ff7fa8'), S(0, 30, 6, 9, '#ff7fa8'), S(14, 24, 6, 9, '#ff7fa8'),
-    S(-10, 6, 17, 6.5, '#ffffff'), S(10, 6, 17, 6.5, '#ffffff'),
-    S(-10, 5, 22, 2.8, DARK), S(10, 5, 22, 2.8, DARK),
-    B(0, -14, 16, 20, 7, 6, '#8a3a52')
+    BA(0, 2, 0, 50, '#ff92b6'),
+    BA(-15, 22, 6, 20, '#ff7fa8'), BA(3, 28, 4, 20, '#ffa8c6'), BA(17, 20, 8, 18, '#ff7fa8'),
+    BA(-4, -18, 8, 18, '#ffadc8'),
+    E(-16, 4, 6, 14, 26, '#d96a92', { ink: 0 }),       // the folds
+    E(14, 8, 6, 12, 22, '#d96a92', { ink: 0 }),
+    ...eyePair(0, 0, 20, 5.6, { dx: 10, look: 0.4 }),
+    mouth(0, -16, 22, 20, 8, '#8a2f4c')
   ];
+
   out.m_crown = [
-    B(0, -12, 0, 40, 34, 26, SKIN),
-    OC(0, 16, 0, 26, 12, '#ffd166'),
-    CN(-18, 28, 0, 8, 18, '#ffd166'), CN(0, 30, 0, 8, 22, '#ffd166'), CN(18, 28, 0, 8, 18, '#ffd166'),
-    S(0, 16, 20, 5, '#ff5d73'),
-    S(-9, -8, 18, 5, '#ffffff'), S(9, -8, 18, 5, '#ffffff'),
-    S(-9, -8, 22, 2.2, DARK), S(9, -8, 22, 2.2, DARK)
+    B(0, -6, 0, 42, 40, 30, SKIN),
+    ...feet(-30, 11, 13, '#c98a5c'),
+    OC(0, 22, 0, 26, 13, '#ffd166'),
+    CN(-17, 33, 0, 8, 18, '#ffd166'), CN(0, 35, 0, 8, 22, '#ffd166'), CN(17, 33, 0, 8, 18, '#ffd166'),
+    S(0, 24, 18, 9, '#ff5d73', { ink: 0.8, k: 1.1 }),
+    ...eyePair(0, 0, 17, 5.2, { dx: 11, look: 0.3 }),
+    mouth(0, -18, 18, 16, 6, '#8a4a58'),
+    ...blush(0, -8, 18, 4.4)
   ];
+
   out.m_ohio = [
-    OC(0, 0, 0, 34, 18, '#4a2f5e', { rx: UP }),
-    RG(0, 0, 0, 32, '#ff2e88', { rx: UP }),
-    OC(0, 0, 0, 20, 22, '#2b1638', { rx: UP }),
-    S(-9, 4, 14, 5.5, '#ffe27a'), S(9, 4, 14, 5.5, '#ffe27a'),
-    B(-20, -22, 4, 10, 22, 10, '#6b3d7a', { rz: 0.5 }), B(20, -22, 4, 10, 22, 10, '#6b3d7a', { rz: -0.5 })
+    OC(0, 0, 0, 36, 20, '#3b2252', { rx: UP }),
+    RG(0, 0, 0, 34, '#ff2e88', { rx: UP, k: 1.15 }),
+    OC(0, 0, 0, 22, 24, '#1b0f2a', { rx: UP, k: 0.8 }),
+    ...eyePair(0, 2, 12, 5.4, { dx: 9, look: 0.5, pupilC: '#ffe27a', white: '#ffe27a' }),
+    B(-22, -24, 4, 11, 24, 11, '#6b3d7a', { rz: 0.5 }), B(22, -24, 4, 11, 24, 11, '#6b3d7a', { rz: -0.5 }),
+    CN(0, 30, 0, 8, 16, '#ff2e88', { k: 1.2 })
   ];
+
   out.m_grass = [
-    B(0, -14, 0, 50, 22, 26, '#5fa86a'),
-    PR(-16, 4, 0, 8, 22, '#7fd48a'), PR(-4, 8, 4, 8, 26, '#8fe3a0'), PR(8, 6, -4, 8, 24, '#7fd48a'), PR(19, 2, 2, 7, 18, '#6fc07a'),
-    S(-9, -12, 15, 5, '#ffffff'), S(9, -12, 15, 5, '#ffffff'),
-    S(-9, -12, 19, 2.2, DARK), S(9, -12, 19, 2.2, DARK)
+    BA(0, -10, 0, 52, '#4f9e5c'),
+    PR(-16, 12, 0, 9, 24, '#7fd48a'), PR(-4, 18, 4, 9, 30, '#8fe3a0'),
+    PR(9, 14, -4, 9, 26, '#7fd48a'), PR(20, 8, 2, 8, 20, '#6fc07a'),
+    ...eyePair(0, -8, 18, 5.2, { dx: 10, look: 0.42 }),
+    mouth(0, -22, 20, 16, 6, '#2f6e33'),
+    ...blush(0, -16, 19, 4.6, '#c9f5b8')
   ];
+
   out.m_ratio = [
-    B(0, 6, 0, 54, 42, 24, WHITE6),
-    PR(0, -20, 0, 12, 16, WHITE6, { rx: Math.PI }),
-    B(-12, 12, 16, 9, 20, 6, DARK), B(4, 12, 16, 9, 20, 6, DARK),
-    PR(19, 10, 16, 8, 16, '#ff5d73', { rx: Math.PI })
+    B(0, 10, 0, 56, 44, 26, WHITE6),
+    PR(0, -18, 0, 14, 18, WHITE6, { rx: Math.PI }),        // the arrow tail
+    BX(-13, 16, 15, 10, 22, 7, DARK, { ink: 0.5 }),        // the eyes of contempt
+    BX(3, 16, 15, 10, 22, 7, DARK, { ink: 0.5 }),
+    PR(21, 12, 14, 9, 18, '#ff5d73', { rx: Math.PI, k: 1.1 }),
+    E(0, -4, 16, 22, 5, '#c9cede', { ink: 0 })
   ];
+
   out.m_fries = [
-    B(-11, 26, 0, 7, 34, 12, '#f6e7a8'), B(-4, 30, 4, 7, 38, 12, '#f6e7a8'),
-    B(4, 30, -4, 7, 40, 12, '#f6e7a8'), B(11, 26, 2, 7, 34, 12, '#f6e7a8'),
-    PR(0, -6, 0, 26, 38, '#ff5d73', { rx: Math.PI }),
-    B(0, 6, 20, 30, 8, 8, '#c23f3c'),
-    S(-8, -2, 22, 5, '#ffffff'), S(8, -2, 22, 5, '#ffffff'),
-    S(-8, -2, 26, 2.2, DARK), S(8, -2, 26, 2.2, DARK)
+    B(-11, 28, 0, 8, 34, 13, '#f6e7a8'), B(-4, 32, 4, 8, 38, 13, '#f6e7a8'),
+    B(4, 32, -4, 8, 40, 13, '#f6e7a8'), B(11, 28, 2, 8, 34, 13, '#f6e7a8'),
+    PR(0, -2, 0, 28, 42, '#ff5d73', { rx: Math.PI }),      // the carton
+    B(0, 10, 18, 32, 9, 8, '#c23f3c', { ink: 0.8 }),
+    ...eyePair(0, 2, 20, 5.2, { dx: 9, look: 0.4 }),
+    mouth(0, -12, 22, 16, 6, '#8a2f3c')
   ];
+
   out.m_coat = [
-    CP(0, -6, 0, 40, 52, '#3d3d4f'),
-    S(0, 26, 0, 21, SKIN2),
-    B(0, 38, 0, 38, 12, 24, '#2f2a22'),
-    B(0, 27, 18, 32, 8, 8, '#151020'),
-    B(-16, -34, 0, 12, 20, 12, '#2a2a38'), B(16, -34, 0, 12, 20, 12, '#2a2a38')
+    CP(0, -8, 0, 42, 30, '#3d3d4f'),                       // the trench
+    B(-19, -22, 4, 12, 26, 14, '#2a2a38'), B(19, -22, 4, 12, 26, 14, '#2a2a38'),
+    ...feet(-36, 12, 13, '#241f2c'),
+    S(0, 22, 0, 34, SKIN),
+    B(0, 36, 0, 38, 13, 26, '#2f2a22'),                     // the hair
+    BX(-8, 24, 15, 12, 9, 7, '#151020', { ink: 0.5, k: 1.5 }),
+    BX(8, 24, 15, 12, 9, 7, '#151020', { ink: 0.5, k: 1.5 }),
+    B(0, 24, 16, 6, 3, 5, '#151020', { ink: 0 }),
+    S(-4, 26, 19, 3.4, '#8fd6ff', { ink: 0, k: 1.5 }),      // the glint of never giving up
+    mouth(0, 10, 17, 14, 5, '#8a4a58')
   ];
+
   out.m_jaw = [
-    B(0, 8, 0, 44, 42, 28, SKIN),
-    B(0, -18, 12, 34, 20, 22, SKIN2),
-    B(0, -22, 22, 22, 6, 8, '#8a4a58'),
-    S(-11, 14, 17, 5.5, '#ffffff'), S(11, 14, 17, 5.5, '#ffffff'),
-    S(-11, 13, 21, 2.4, DARK), S(11, 13, 21, 2.4, DARK)
+    B(0, 14, 0, 44, 40, 30, SKIN),
+    B(0, -14, 12, 36, 22, 26, SKIN2),                        // the jaw
+    B(0, -22, 22, 24, 6, 8, '#8a4a58', { ink: 0.7 }),
+    BX(-14, 22, 17, 12, 5, 6, '#3b2a34', { ink: 0 }),        // the brow
+    BX(14, 22, 17, 12, 5, 6, '#3b2a34', { ink: 0 }),
+    ...eyePair(0, 16, 18, 4.6, { dx: 12, look: 0.2 })
   ];
+
   out.m_mega = [
-    B(-14, 0, 0, 26, 26, 24, '#c9c9d6'),
-    CN(14, 0, 0, 26, 34, '#ff8a4c', { rz: -UP }),
-    B(-6, -26, 0, 12, 22, 14, '#8f86a8'),
-    RG(34, 0, 0, 12, '#ffe27a'), RG(40, 0, 0, 16, '#ffd166'),
-    S(-16, 6, 14, 5, '#ffffff'), S(-16, 6, 18, 2.2, DARK)
+    B(-14, 0, 0, 26, 26, 26, STEEL),
+    CN(14, 0, 0, 28, 36, '#ff8a4c', { rz: -UP, k: 1.06 }),
+    CN(34, 0, 0, 15, 8, '#c9541f', { rz: -UP, k: 0.9 }),
+    B(-8, -26, 0, 13, 22, 15, STEEL2),
+    RG(30, 0, 0, 13, '#ffe27a', { k: 1.1 }),
+    ...oneEye(-16, 8, 15, 5.4, { look: 0 })
   ];
+
   out.m_fine = [
-    CY(0, -6, 0, 24, 34, '#d9a06a'),
-    RG(24, -2, 0, 12, '#b5773a', { ry: UP }),
-    CN(-6, 20, 0, 9, 20, '#ff9040'), CN(8, 24, 4, 7, 16, '#ffd166'),
-    S(-8, -4, 20, 5, '#ffffff'), S(8, -4, 20, 5, '#ffffff'),
-    S(-8, -4, 24, 2.2, DARK), S(8, -4, 24, 2.2, DARK)
+    /* the house is on fire behind him and he is unbothered */
+    CN(-19, -22, -6, 11, 30, '#ff9040', { k: 1.2 }), CN(0, -30, -8, 10, 36, '#ffd166', { k: 1.2 }),
+    CN(19, -22, -6, 10, 28, '#ff5d73', { k: 1.1 }),
+    ...ears(20, 17, 9, 16, '#c98a55'),
+    B(0, -2, 0, 42, 40, 30, '#d9a06a'),
+    B(12, -14, 16, 22, 15, 17, '#eab07f'),
+    RG(26, -2, 6, 11, '#b5773a', { ry: UP }),               // the mug, in the flames
+    ...eyePair(0, 6, 18, 4.8, { dx: 10, look: 0.12 }),
+    mouth(13, -22, 20, 16, 5, '#7a3540'),
+    S(22, -8, 22, 8, '#3b2530', { ink: 0.7 })
   ];
+
   out.m_bird = [
-    PR(0, -10, 0, 24, 30, '#e8e2d0', { rx: Math.PI }),
-    S(0, 14, 6, 17, '#a97c50'),
-    PR(16, 10, 14, 9, 12, '#ffb648', { rz: -UP }),
-    S(-6, 18, 20, 5, '#ffffff'), S(6, 18, 20, 5, '#ffffff'),
-    S(-6, 18, 24, 2.2, DARK), S(6, 18, 24, 2.2, DARK),
-    PR(-4, 34, 0, 7, 14, '#f6f2e6')
+    PR(0, -12, 0, 26, 34, '#efe8d6', { rx: Math.PI }),        // the body
+    S(0, 14, 6, 34, '#a97c50'),
+    PR(17, 12, 14, 10, 14, '#ffb648', { rz: -UP }),           // birb
+    PR(-4, 36, 0, 8, 16, '#f6f2e6'),
+    ...eyePair(0, 18, 19, 4.8, { dx: 9, look: 0.42 }),
+    B(-14, -22, 6, 8, 14, 8, '#8a6a45'), B(10, -22, 6, 8, 14, 8, '#8a6a45')
   ];
+
   out.m_chad = [
-    B(0, -20, 0, 52, 30, 26, '#4a4a5e'),
-    B(0, 14, 0, 42, 44, 28, '#e6e0f0'),
-    B(0, -6, 8, 36, 18, 24, '#dcd4e8'),
-    B(-11, 20, 18, 11, 7, 6, DARK), B(11, 20, 18, 11, 7, 6, DARK),
-    B(0, 34, 0, 44, 12, 26, '#3f3a4a')
+    B(0, -22, 0, 54, 32, 28, '#3f4257'),                      // the blazer
+    B(0, 12, 0, 44, 46, 30, '#e6e0f0'),
+    B(0, -8, 10, 38, 20, 26, '#dcd4e8'),                       // the chin
+    B(0, 34, 0, 46, 13, 28, '#3f3a4a'),                        // the hair
+    BX(-12, 20, 18, 12, 6, 6, DARK, { ink: 0 }), BX(12, 20, 18, 12, 6, 6, DARK, { ink: 0 }),
+    B(0, 2, 20, 16, 4, 5, '#b8aecc', { ink: 0 })
   ];
+
   out.m_bot = [
-    B(0, -6, 0, 42, 48, 26, '#3a2340'),
-    B(0, 4, 14, 30, 26, 8, '#151020'),
-    PR(0, 6, 20, 10, 14, '#ff5d73', { rx: Math.PI }),
-    CY(0, 32, 0, 4, 20, '#8f86a8'), S(0, 44, 0, 7, '#ff5d73'),
-    B(-14, -34, 0, 12, 16, 12, '#2a1a30'), B(14, -34, 0, 12, 16, 12, '#2a1a30')
+    B(0, -6, 0, 44, 46, 28, '#33213d'),
+    BX(0, 2, 15, 32, 26, 8, '#120c1a', { ink: 0.5, k: 1.2 }),  // the screen
+    PR(0, 4, 21, 11, 15, '#ff5d73', { rx: Math.PI, k: 1.2 }),  // the notification
+    CY(0, 32, 0, 5, 20, STEEL2), S(0, 46, 0, 12, '#ff5d73', { k: 1.1 }),
+    ...feet(-32, 13, 14, '#241a2c')
   ];
-  /* degen */
-  out.m_pepe = out.m_pepe;
+
+  /* --- degen content ------------------------------------------ */
   out.m_whale = [
-    E(0, 0, 0, 62, 40, '#5b8fd6'),
-    E(-30, 6, 0, 22, 26, '#4c7fc4'),
-    B(34, 2, 0, 22, 12, 16, '#4c7fc4', { rz: 0.5 }), B(34, -4, 0, 22, 12, 16, '#4c7fc4', { rz: -0.5 }),
-    S(-22, 8, 18, 6, '#ffffff'), S(-22, 8, 22, 2.8, DARK),
-    B(-40, 14, 0, 16, 6, 12, '#8fd6ff'),
-    CN(-40, 26, 0, 7, 16, '#8fd6ff'), CN(-32, 30, 4, 6, 14, '#8fd6ff')
+    E(0, 2, 0, 66, 44, '#5b8fd6'),
+    E(-30, 8, 0, 24, 28, '#4c7fc4'),
+    B(36, 4, 0, 24, 13, 18, '#4c7fc4', { rz: 0.5 }), B(36, -6, 0, 24, 13, 18, '#4c7fc4', { rz: -0.5 }),
+    CN(-40, 26, 0, 8, 20, '#8fd6ff'), CN(-30, 30, 4, 7, 16, '#8fd6ff'),
+    ...oneEye(-22, 10, 18, 6.6, { look: 0.4 }),
+    E(-44, 4, 8, 18, 6, '#3f6fae', { ink: 0.6 })
   ];
+
   out.m_rocket = [
-    CY(0, -4, 0, 16, 40, '#eef2f8'),
-    CN(0, 26, 0, 16, 22, '#ff5d73'),
-    PR(-18, -22, 0, 12, 20, '#c9c9d6', { rz: 0.4 }), PR(18, -22, 0, 12, 20, '#c9c9d6', { rz: -0.4 }),
-    CN(0, -34, 0, 12, 22, '#ff9040', { rx: Math.PI }),
-    B(0, -2, 18, 16, 12, 8, '#8fd6ff')
+    CY(0, -4, 0, 17, 42, '#eef2f8'),
+    CN(0, 28, 0, 17, 24, '#ff5d73'),
+    PR(-19, -24, 0, 13, 22, STEEL, { rz: 0.4 }), PR(19, -24, 0, 13, 22, STEEL, { rz: -0.4 }),
+    CN(0, -38, 0, 13, 24, '#ff9040', { rx: Math.PI, k: 1.2 }),
+    CY(0, -2, 18, 8, 8, '#8fd6ff', { rx: UP, k: 1.1 }),
+    S(0, 8, 16, 14, '#8fd6ff', { ink: 0.7 })
   ];
+
   out.m_candle = [
-    B(0, -8, 0, 26, 46, 26, '#ff5d73'),
-    B(0, 18, 0, 4, 12, 4, DARK),
-    CN(0, 32, 0, 9, 20, '#ffd166'),
-    B(-24, -28, 0, 12, 4, 12, '#7ff0a8'), B(24, 12, 0, 12, 4, 12, '#ff2e88')
+    B(0, -10, 0, 28, 48, 28, '#ff5d73'),
+    B(0, 18, 0, 5, 12, 5, DARK, { ink: 0.5 }),
+    CN(0, 34, 0, 10, 22, '#ffd166', { k: 1.2 }),
+    B(-25, -30, 0, 13, 5, 13, '#7ff0a8', { ink: 0.6 }), B(25, 14, 0, 13, 5, 13, '#ff2e88', { ink: 0.6 }),
+    ...eyePair(0, -4, 16, 5, { dx: 8, look: 0.4 }),
+    mouth(0, -22, 18, 14, 5, '#8a2f3c')
   ];
+
   out.m_diamondm = [
-    OC(0, 8, 0, 30, 22, '#bfe9ff'),
-    OC(0, -12, 0, 22, 26, '#8fd6ff', { rx: Math.PI }),
-    S(0, 12, 22, 6, '#ffffff', { k: 1.3 }),
-    B(-30, -14, 0, 16, 16, 16, SKIN), B(30, -14, 0, 16, 16, 16, SKIN)
+    OC(0, 10, 0, 32, 24, '#bfe9ff', { k: 1.1 }),
+    OC(0, -14, 0, 24, 28, '#8fd6ff', { rx: Math.PI, k: 0.95 }),
+    S(0, 14, 22, 12, '#ffffff', { ink: 0, k: 1.45 }),
+    B(-30, -14, 4, 18, 18, 18, SKIN), B(30, -14, 4, 18, 18, 18, SKIN)
   ];
+
   out.m_rug = [
-    B(0, -12, 0, 58, 16, 22, '#b2546f'),
-    B(-14, 0, 0, 20, 12, 20, '#8f3f5a'), B(14, 0, 0, 20, 12, 20, '#d4708a'),
-    CY(-30, -12, 0, 10, 20, '#c25f7a', { rz: UP }),
-    B(20, -26, 0, 26, 6, 14, '#e8c878'),
-    S(-6, -22, 14, 4.5, '#ffffff'), S(-6, -22, 18, 2, DARK)
+    B(0, -14, 0, 60, 18, 24, '#b2546f'),
+    B(-16, -2, 0, 22, 14, 22, '#8f3f5a'), B(16, -2, 0, 22, 14, 22, '#d4708a'),
+    CY(-32, -14, 0, 11, 22, '#c25f7a', { rz: UP }),          // the rolled end
+    B(22, -28, 0, 28, 7, 15, '#e8c878', { ink: 0.7 }),        // the fringe
+    ...oneEye(-6, -22, 14, 5, { look: 0.5 })
   ];
+
   out.m_printer = [
-    B(0, -10, 0, 50, 34, 28, '#8fe3a0'),
-    B(0, 8, 6, 42, 8, 24, '#4f9c52'),
-    B(-20, 22, 8, 18, 22, 12, '#f4f8ff', { rz: 0.3 }), B(6, 28, -4, 18, 22, 12, '#f4f8ff', { rz: -0.25 }),
-    B(0, -12, 16, 28, 12, 8, '#151020'),
-    S(-16, -14, 18, 5, '#ffffff'), S(16, -14, 18, 5, '#ffffff'),
-    S(-16, -14, 22, 2.2, DARK), S(16, -14, 22, 2.2, DARK)
+    B(0, -12, 0, 52, 38, 32, '#8fe3a0'),
+    B(0, 10, 8, 44, 10, 26, '#4f9c52'),
+    B(-20, 26, 10, 20, 24, 13, '#f4f8ff', { rz: 0.32 }), B(6, 32, -4, 20, 24, 13, '#f4f8ff', { rz: -0.26 }),
+    BX(0, -14, 18, 30, 13, 8, '#151020', { ink: 0.6, k: 1.3 }),
+    ...eyePair(0, 2, 20, 5.2, { dx: 12, look: 0.35 })
   ];
+
   out.m_moon = [
-    S(0, 0, 0, 30, '#ffe27a'),
-    S(-14, 12, 22, 6, '#f6d3a0'), S(12, -8, 24, 8, '#f6d3a0'), S(4, 18, 20, 4, '#f6d3a0'),
-    B(-11, 2, 26, 8, 10, 6, DARK), B(11, 2, 26, 8, 10, 6, DARK),
-    E(0, -14, 26, 18, 8, '#8a4a58')
+    BA(0, 0, 0, 34, '#ffe27a'),
+    BA(-14, 12, 22, 12, '#f6d3a0'), BA(12, -8, 24, 15, '#f6d3a0'), BA(4, 18, 20, 8, '#f6d3a0'),
+    ...eyePair(0, 4, 26, 5.4, { dx: 11, look: 0.34 }),
+    mouth(0, -14, 26, 20, 9, '#8a4a58')
   ];
   return out;
 }
@@ -850,113 +1162,159 @@ function castMemes() {
 function castPlayer() {
   /* parts are pushed separately so the run cycle is real motion, not frames */
   return {
-    pl_body: [B(0, 0, 0, 30, 34, 22, '#ff6b8a'), B(0, 6, -10, 22, 22, 12, '#d94f6c')],
-    pl_head: [S(0, 0, 0, 19, '#ffd7e2'), S(-7, 4, 15, 4.6, '#ffffff'), S(7, 4, 15, 4.6, '#ffffff'),
-      S(-7, 4, 18, 2.1, DARK), S(7, 4, 18, 2.1, DARK), B(0, -8, 16, 12, 5, 5, '#8a4a58')],
-    pl_arm: [CP(0, 0, 0, 13, 24, '#ffd7e2'), S(0, -14, 0, 7, '#f6b8c8')],
-    pl_leg: [B(0, 0, 0, 13, 22, 14, '#8f5f7a'), B(0, -12, 4, 17, 9, 18, '#ffd166')],
-    pl_gun: [B(0, 0, 0, 30, 12, 12, '#3a2340'), B(16, 1, 0, 14, 8, 8, '#8f86a8'),
-      B(-12, -6, 0, 10, 14, 10, '#5a3f68')]
+    pl_body: [
+      B(0, 4, -12, 24, 24, 12, '#d94f6c'),                    // backpack
+      B(0, 2, 0, 34, 34, 26, '#ff5d73'),                       // the hoodie
+      B(0, -14, 2, 30, 10, 24, '#e0476a', { ink: 0.8 }),       // hem
+      B(-11, 6, 12, 7, 16, 5, '#ffe27a', { ink: 0.5 }),        // the drawstrings
+      B(11, 6, 12, 7, 16, 5, '#ffe27a', { ink: 0.5 })
+    ],
+    pl_head: [
+      B(0, 1, -16, 24, 16, 13, '#8a4a56'),                     // the hood, behind
+      S(0, 0, 0, 31, SKIN),
+      B(0, 12, 5, 27, 7, 21, '#743d4a', { rz: -0.05 }),        // the fringe, thin enough to keep the face
+      B(-13, 2, 12, 6, 7, 5, '#c98a5c', { ink: 0 }),           // ears
+      B(13, 2, 12, 6, 7, 5, '#c98a5c', { ink: 0 }),
+      ...eyePair(0, 3, 14, 4.8, { dx: 6.5, look: 0.55 }),
+      ...blush(0, -3, 13, 3.8),
+      mouth(0, -8, 15, 11, 5, '#8a3a4c')
+    ],
+    pl_arm: [CP(0, 0, 0, 13, 12, '#ff5d73'), S(0, -16, 0, 13, SKIN, { ink: 0.9 })],
+    pl_leg: [B(0, 0, 0, 14, 22, 15, '#3f4a6b'), B(0, -14, 4, 19, 10, 20, '#ffd166')],
+    pl_gun: [B(0, 0, 0, 30, 12, 12, STEEL2)]
   };
 }
 
 function castGuns() {
   return {
-    g_blaster: [B(0, 0, 0, 34, 13, 13, '#4a4a5e'), B(18, 2, 0, 14, 9, 9, '#8fd6ff'), B(-14, -6, 0, 11, 15, 11, '#2f2a3a')],
-    g_bread: [B(0, 0, 0, 30, 22, 20, '#e8b072'), B(0, 12, 0, 24, 6, 16, '#c98b4a'), B(16, 0, 0, 10, 16, 14, '#f6d3a0')],
-    g_prism: [B(0, 0, 0, 40, 11, 11, '#8fd6ff'), CN(24, 0, 0, 8, 16, '#ff9dbd', { rz: -UP }), B(-16, -4, 0, 12, 16, 12, '#4a6f8a')],
-    g_voidgun: [B(0, 0, 0, 30, 18, 16, '#4a2f5e'), CY(20, 0, 0, 9, 14, '#a05ae0', { rz: UP }), RG(28, 0, 0, 8, '#c9a8e8')],
-    g_susgun: [B(0, 0, 0, 28, 20, 18, '#3f8fd6'), B(12, 6, 8, 14, 10, 10, '#bfe6ff'), B(-14, -6, 0, 10, 14, 10, '#2f5f8a')],
-    g_moonshot: [CN(14, 0, 0, 9, 20, '#ff5d73', { rz: -UP }), CY(-4, 0, 0, 8, 18, '#eef2f8', { rz: UP }),
-      PR(-16, 8, 0, 7, 12, '#ff9040', { rz: 0.6 }), PR(-16, -8, 0, 7, 12, '#ff9040', { rz: -0.6 })],
-    g_pump: [B(0, 0, 0, 26, 22, 20, '#ff9dbd'), CN(16, 0, 0, 10, 14, '#ff5d73', { rz: -UP }), B(-14, -4, 0, 10, 14, 12, '#c23f3c')],
-    g_leverage: [B(0, 0, 0, 32, 14, 14, '#f4f8ff'), B(0, 0, 8, 26, 5, 5, '#ff5d73'), B(18, 0, 0, 8, 12, 12, '#ffd166')],
-    g_airdrop: [B(0, 0, 0, 28, 22, 20, '#ffd166'), CY(16, 0, 0, 8, 8, '#ffe98a', { rz: UP }), B(-14, -4, 0, 10, 14, 12, '#c98b4a')]
+    g_blaster: [B(0, 0, 0, 36, 14, 14, '#5b6076'), B(20, 2, 0, 15, 10, 10, '#8fd6ff', { k: 1.3 }),
+      B(-15, -7, 0, 12, 16, 12, '#2f2a3a')],
+    g_bread: [B(0, 0, 0, 32, 24, 22, '#e8b072'), B(0, 13, 0, 26, 7, 18, '#c98b4a'), B(17, 0, 0, 11, 17, 15, '#f6d3a0')],
+    g_prism: [B(0, 0, 0, 42, 12, 12, '#8fd6ff'), CN(26, 0, 0, 9, 18, '#ff9dbd', { rz: -UP, k: 1.15 }),
+      B(-17, -5, 0, 13, 17, 13, '#4a6f8a')],
+    g_voidgun: [B(0, 0, 0, 32, 19, 17, '#4a2f5e'), CY(21, 0, 0, 10, 15, '#a05ae0', { rz: UP, k: 1.2 }),
+      RG(29, 0, 0, 9, '#c9a8e8', { k: 1.15 })],
+    g_susgun: [B(0, 0, 0, 30, 21, 19, '#3f8fd6'), B(13, 6, 9, 15, 11, 11, '#bfe6ff', { k: 1.1 }),
+      B(-15, -7, 0, 11, 15, 11, '#2f5f8a')],
+    g_moonshot: [CN(15, 0, 0, 10, 22, '#ff5d73', { rz: -UP }), CY(-5, 0, 0, 9, 19, '#eef2f8', { rz: UP }),
+      PR(-17, 9, 0, 8, 13, '#ff9040', { rz: 0.6 }), PR(-17, -9, 0, 8, 13, '#ff9040', { rz: -0.6 })],
+    g_pump: [B(0, 0, 0, 28, 24, 22, '#ff9dbd'), CN(17, 0, 0, 11, 15, '#ff5d73', { rz: -UP }),
+      B(-15, -5, 0, 11, 15, 13, '#c23f3c')],
+    g_leverage: [B(0, 0, 0, 34, 15, 15, '#f4f8ff'), B(0, 0, 9, 28, 6, 6, '#ff5d73', { ink: 0.6, k: 1.2 }),
+      B(19, 0, 0, 9, 13, 13, '#ffd166')],
+    g_airdrop: [B(0, 0, 0, 30, 23, 21, '#ffd166'), CY(17, 0, 0, 9, 9, '#ffe98a', { rz: UP, k: 1.1 }),
+      B(-15, -5, 0, 11, 15, 13, '#c98b4a')]
   };
 }
 
 function castBullets() {
   return {
-    bl_bolt: [B(0, 0, 0, 20, 8, 8, '#8fd6ff'), CN(13, 0, 0, 6, 12, '#ffffff', { rz: -UP })],
-    bl_laser: [B(0, 0, 0, 30, 5, 5, '#ff5d73'), B(0, 0, 6, 34, 3, 3, '#ffffff', { k: 1.3 })],
-    bl_bread: [B(0, 0, 0, 18, 14, 12, '#e8b072'), B(0, 7, 0, 14, 4, 10, '#c98b4a')],
-    bl_coin: [CY(0, 0, 0, 11, 5, '#ffd166', { rx: UP }), OC(0, 0, 2, 6, 6, '#ffe98a', { rx: UP })],
-    bl_rocket: [CN(0, 0, 0, 9, 18, '#ff5d73', { rz: -UP }), CY(-12, 0, 0, 8, 16, '#eef2f8', { rz: UP }), CN(-24, 0, 0, 7, 14, '#ff9040', { rz: UP })],
-    bl_pump: [S(0, 0, 0, 16, '#ff9dbd'), CN(14, 0, 0, 7, 12, '#ffffff', { rz: -UP })],
-    bl_lever: [B(0, 0, 0, 26, 12, 10, '#f4f8ff'), B(0, 0, 6, 22, 4, 4, '#ff5d73'), CN(16, 0, 0, 7, 12, '#ffd166', { rz: -UP })],
-    bl_crew: [CP(0, 0, 0, 16, 22, '#3f8fd6'), B(4, 4, 8, 10, 7, 6, '#bfe6ff')],
-    bl_orb: [S(0, 0, 0, 13, '#a05ae0'), RG(0, 0, 0, 14, '#c9a8e8')],
-    bl_down: [PR(0, 0, 0, 13, 14, '#ff5d73', { rx: Math.PI }), B(0, 6, 0, 10, 8, 10, '#c23f3c')],
-    bl_mid: [B(0, 0, 0, 22, 16, 12, '#3f8fd6'), B(0, 0, 8, 14, 8, 4, '#f4f8ff')],
-    bl_heart: [S(-6, 2, 0, 8, '#ff5d73'), S(6, 2, 0, 8, '#ff5d73'), PR(0, -8, 0, 12, 12, '#ff5d73', { rx: Math.PI })],
-    bl_rekt: [B(0, 0, 0, 20, 20, 12, '#ff2e88'), B(0, 0, 8, 12, 4, 4, '#ffffff')]
+    bl_bolt: [B(0, 0, 0, 22, 9, 9, '#8fd6ff', { k: 1.15 }), CN(15, 0, 0, 6, 13, '#ffffff', { rz: -UP, ink: 0, k: 1.4 })],
+    bl_laser: [B(0, 0, 0, 32, 6, 6, '#ff5d73', { k: 1.2 }), B(0, 0, 7, 36, 3, 3, '#ffffff', { ink: 0, k: 1.5 })],
+    bl_bread: [B(0, 0, 0, 19, 15, 13, '#e8b072'), B(0, 8, 0, 15, 4, 11, '#c98b4a', { ink: 0.6 })],
+    bl_coin: [CY(0, 0, 0, 12, 6, '#ffd166', { rx: UP, k: 1.1 }), OC(0, 0, 3, 6, 7, '#ffe98a', { rx: UP, ink: 0.6, k: 1.2 })],
+    bl_rocket: [CN(0, 0, 0, 10, 20, '#ff5d73', { rz: -UP }), CY(-13, 0, 0, 9, 17, '#eef2f8', { rz: UP }),
+      CN(-26, 0, 0, 8, 15, '#ff9040', { rz: UP, k: 1.2 })],
+    bl_pump: [BA(0, 0, 0, 18, '#ff9dbd', { k: 1.1 }), CN(15, 0, 0, 8, 13, '#ffffff', { rz: -UP, ink: 0, k: 1.3 })],
+    bl_lever: [B(0, 0, 0, 28, 13, 11, '#f4f8ff'), B(0, 0, 7, 24, 5, 5, '#ff5d73', { ink: 0.5, k: 1.2 }),
+      CN(17, 0, 0, 8, 13, '#ffd166', { rz: -UP })],
+    bl_crew: [CP(0, 0, 0, 17, 12, '#3f8fd6'), B(5, 4, 8, 11, 8, 6, '#bfe6ff', { ink: 0.5, k: 1.2 })],
+    bl_orb: [BA(0, 0, 0, 15, '#a05ae0', { k: 1.15 }), RG(0, 0, 0, 15, '#c9a8e8', { k: 1.2 })],
+    bl_down: [PR(0, 0, 0, 14, 15, '#ff5d73', { rx: Math.PI, k: 1.1 }), B(0, 7, 0, 11, 9, 11, '#c23f3c')],
+    bl_mid: [B(0, 0, 0, 24, 17, 13, '#3f8fd6'), B(0, 0, 9, 15, 9, 5, '#f4f8ff', { ink: 0.5, k: 1.2 })],
+    bl_heart: [S(-6, 3, 0, 12, '#ff5d73', { k: 1.1 }), S(6, 3, 0, 12, '#ff5d73', { k: 1.1 }),
+      PR(0, -9, 0, 13, 13, '#ff5d73', { rx: Math.PI })],
+    bl_rekt: [B(0, 0, 0, 22, 22, 13, '#ff2e88', { k: 1.1 }), B(0, 0, 9, 13, 5, 5, '#ffffff', { ink: 0, k: 1.4 })]
   };
 }
 
 function castPickups() {
   return {
-    pk_coin: [CY(0, 0, 0, 13, 6, '#ffd166', { rx: UP }), OC(0, 0, 3, 7, 4, '#ffe98a', { rx: UP })],
-    pk_gem: [OC(0, 4, 0, 15, 14, '#ff9dbd'), OC(0, -8, 0, 11, 14, '#ff7fa8', { rx: Math.PI })],
-    pk_heart: [S(-6, 4, 0, 8.5, '#ff5d73'), S(6, 4, 0, 8.5, '#ff5d73'), PR(0, -8, 0, 14, 14, '#ff5d73', { rx: Math.PI })],
-    pk_bag: [B(0, -4, 0, 30, 26, 20, '#ffd166'), RG(0, 14, 0, 9, '#c98b4a', { rx: UP }), B(0, 0, 14, 12, 12, 6, '#8a6a2a')],
-    pk_diamond: [OC(0, 5, 0, 16, 13, '#bfe9ff'), OC(0, -8, 0, 12, 14, '#8fd6ff', { rx: Math.PI }), S(4, 8, 14, 4, '#ffffff', { k: 1.3 })],
-    pk_advisory: [B(0, 0, 0, 26, 32, 8, '#f4f8ff'), B(-6, 8, 6, 14, 3, 3, '#8f86a8'), B(-2, 0, 6, 18, 3, 3, '#8f86a8'), B(0, -8, 6, 12, 3, 3, '#8f86a8')],
-    pk_lever: [B(0, 0, 0, 28, 20, 12, '#ff5d73'), B(0, 0, 8, 20, 6, 4, '#f4f8ff')],
-    cr_blaster: [B(0, 0, 0, 34, 26, 22, '#4a4a5e'), B(14, 2, 0, 12, 8, 8, '#8fd6ff')],
-    cr_bread: [B(0, 0, 0, 34, 26, 22, '#e8b072'), B(0, 10, 0, 26, 6, 18, '#c98b4a')],
-    cr_prism: [B(0, 0, 0, 34, 26, 22, '#8fd6ff'), B(14, 0, 0, 12, 8, 8, '#ff9dbd')],
-    cr_voidgun: [B(0, 0, 0, 34, 26, 22, '#4a2f5e'), RG(0, 0, 12, 10, '#a05ae0')],
-    cr_susgun: [B(0, 0, 0, 34, 26, 22, '#3f8fd6'), B(10, 4, 10, 12, 9, 8, '#bfe6ff')],
-    cr_moonshot: [B(0, 0, 0, 34, 26, 22, '#ff5d73'), CN(0, 8, 12, 8, 16, '#eef2f8')],
-    cr_pump: [B(0, 0, 0, 34, 26, 22, '#ff9dbd'), CN(0, 10, 12, 9, 14, '#ffffff', { rx: Math.PI })],
-    cr_leverage: [B(0, 0, 0, 34, 26, 22, '#f4f8ff'), B(0, 8, 12, 20, 6, 6, '#ff5d73')],
-    cr_airdrop: [B(0, 0, 0, 34, 26, 22, '#ffd166'), CY(0, 8, 12, 8, 6, '#ffe98a', { rx: UP })]
+    pk_coin: [CY(0, 0, 0, 15, 8, '#e0a83a', { rx: UP }), CY(0, 0, 3, 12, 6, '#ffd166', { rx: UP, k: 1.15 }),
+      OC(0, 0, 6, 5, 6, '#ffe98a', { rx: UP, ink: 0.5, k: 1.3 }),
+      S(-4, 5, 7, 5, '#fff8d8', { ink: 0, k: 1.5 })],
+    pk_gem: [OC(0, 5, 0, 16, 15, '#ff9dbd', { k: 1.1 }), OC(0, -9, 0, 12, 15, '#ff7fa8', { rx: Math.PI }),
+      S(3, 8, 14, 6, '#ffffff', { ink: 0, k: 1.5 })],
+    pk_heart: [S(-6, 5, 0, 13, '#ff5d73', { k: 1.15 }), S(6, 5, 0, 13, '#ff5d73', { k: 1.15 }),
+      PR(0, -9, 0, 15, 15, '#ff5d73', { rx: Math.PI }), S(-4, 8, 8, 4, '#ffffff', { ink: 0, k: 1.5 })],
+    pk_bag: [B(0, -4, 0, 32, 28, 22, '#ffd166'), RG(0, 15, 0, 10, '#c98b4a', { rx: UP }),
+      B(0, 0, 15, 13, 13, 7, '#8a6a2a', { ink: 0.7 })],
+    pk_diamond: [OC(0, 6, 0, 17, 14, '#bfe9ff', { k: 1.12 }), OC(0, -9, 0, 13, 15, '#8fd6ff', { rx: Math.PI }),
+      S(4, 9, 15, 6, '#ffffff', { ink: 0, k: 1.5 })],
+    pk_advisory: [B(0, 0, 0, 28, 34, 9, '#f4f8ff'), B(-7, 9, 7, 15, 3.4, 3, '#8f86a8', { ink: 0.4 }),
+      B(-2, 0, 7, 19, 3.4, 3, '#8f86a8', { ink: 0.4 }), B(0, -9, 7, 13, 3.4, 3, '#8f86a8', { ink: 0.4 })],
+    pk_lever: [B(0, 0, 0, 30, 22, 13, '#ff5d73', { k: 1.1 }), B(0, 0, 9, 21, 7, 5, '#f4f8ff', { ink: 0.5, k: 1.2 })],
+    cr_blaster: [B(0, 0, 0, 36, 28, 24, '#4a4a5e'), B(15, 2, 0, 13, 9, 9, '#8fd6ff', { k: 1.2 })],
+    cr_bread: [B(0, 0, 0, 36, 28, 24, '#e8b072'), B(0, 11, 0, 28, 7, 20, '#c98b4a', { ink: 0.7 })],
+    cr_prism: [B(0, 0, 0, 36, 28, 24, '#8fd6ff'), B(15, 0, 0, 13, 9, 9, '#ff9dbd', { k: 1.2 })],
+    cr_voidgun: [B(0, 0, 0, 36, 28, 24, '#4a2f5e'), RG(0, 0, 13, 11, '#a05ae0', { k: 1.25 })],
+    cr_susgun: [B(0, 0, 0, 36, 28, 24, '#3f8fd6'), B(11, 5, 11, 13, 10, 9, '#bfe6ff', { k: 1.2 })],
+    cr_moonshot: [B(0, 0, 0, 36, 28, 24, '#ff5d73'), CN(0, 9, 13, 9, 18, '#eef2f8')],
+    cr_pump: [B(0, 0, 0, 36, 28, 24, '#ff9dbd'), CN(0, 11, 13, 10, 16, '#ffffff', { rx: Math.PI, k: 1.2 })],
+    cr_leverage: [B(0, 0, 0, 36, 28, 24, '#f4f8ff'), B(0, 9, 13, 21, 7, 7, '#ff5d73', { k: 1.15 })],
+    cr_airdrop: [B(0, 0, 0, 36, 28, 24, '#ffd166'), CY(0, 9, 13, 9, 7, '#ffe98a', { rx: UP, k: 1.15 })]
   };
 }
 
 function castBlocks() {
   return {
-    b_spike: [B(0, 0, 0, 46, 40, 34, '#8f5a2c'), B(0, 22, 0, 40, 6, 30, '#6b4420'),
-      PR(-14, 30, 0, 8, 18, '#c9c9d6'), PR(0, 32, 0, 8, 20, '#c9c9d6'), PR(14, 30, 0, 8, 18, '#c9c9d6')],
-    b_saw: [CY(0, 0, 0, 30, 12, '#c9c9d6', { rx: UP }),
-      PR(-26, 0, 0, 9, 12, '#e8ecf2', { rz: 0 }), PR(26, 0, 0, 9, 12, '#e8ecf2', { rz: 0 }),
-      PR(0, 26, 0, 9, 12, '#e8ecf2', { rz: UP }), PR(0, -26, 0, 9, 12, '#e8ecf2', { rz: UP }),
-      PR(19, 19, 0, 9, 12, '#e8ecf2', { rz: 0.78 }), PR(-19, 19, 0, 9, 12, '#e8ecf2', { rz: -0.78 }),
-      PR(19, -19, 0, 9, 12, '#e8ecf2', { rz: -0.78 }), PR(-19, -19, 0, 9, 12, '#e8ecf2', { rz: 0.78 }),
-      S(0, 0, 0, 10, '#ff5d73')],
-    b_mount: [B(0, 0, 0, 30, 22, 26, '#6b5a78'), B(0, 14, 0, 22, 10, 20, '#8f86a8')],
-    b_cone: [CN(0, 14, 0, 14, 34, '#ff8a4c'), B(0, -14, 0, 40, 14, 34, '#e8ecf2'), B(0, 4, 0, 22, 6, 20, '#f4f8ff')],
-    b_monitor: [B(0, 4, 0, 52, 40, 26, '#3a3a4a'), B(0, 6, 14, 42, 30, 6, '#151020'),
-      B(-10, 8, 18, 8, 14, 4, '#7ff0a8'), B(0, 8, 18, 8, 14, 4, '#7ff0a8'), B(10, 8, 18, 8, 14, 4, '#7ff0a8'),
-      B(0, -24, 0, 20, 10, 20, '#4a4a5e')],
-    b_nft: [B(0, 0, 0, 46, 52, 14, '#ffd166'), B(0, 0, 8, 34, 40, 8, '#6b3d7a'), S(0, 4, 14, 9, '#ff9dbd')],
-    b_rug: [B(0, 0, 0, 60, 20, 26, '#b2546f'), B(0, 12, 0, 52, 8, 22, '#8f3f5a'), B(24, -12, 0, 20, 6, 16, '#e8c878')],
-    b_engine: [B(0, -6, 0, 52, 44, 34, '#ff5d73'), CY(-18, 20, 0, 9, 20, '#c9c9d6'), CY(18, 20, 0, 9, 20, '#c9c9d6'),
-      B(0, -4, 18, 34, 10, 6, '#151020'), B(-26, -24, 0, 12, 14, 20, '#8f86a8'), B(26, -24, 0, 12, 14, 20, '#8f86a8')],
-    b_candle: [B(0, -4, 0, 30, 50, 30, '#ff5d73'), B(0, 24, 0, 5, 12, 5, DARK),
-      CN(0, 38, 0, 10, 20, '#ffd166'), B(-16, -26, 0, 12, 5, 12, '#7ff0a8'), B(16, 18, 0, 12, 5, 12, '#ff2e88')],
-    b_atm: [B(0, 0, 0, 46, 56, 30, '#7fd48a'), B(0, 12, 16, 32, 22, 6, '#151020'), B(0, -10, 18, 26, 8, 6, '#f4f8ff'),
-      B(-14, -22, 16, 8, 6, 4, '#ffd166'), B(-4, -22, 16, 8, 6, 4, '#ffd166'), B(6, -22, 16, 8, 6, 4, '#ffd166')]
+    b_spike: [B(0, 2, 0, 48, 44, 36, '#8f5a2c'),
+      B(0, 24, 0, 42, 8, 32, '#6b4420', { ink: 0.8 }),
+      PR(-14, 34, 0, 8, 20, STEEL), PR(0, 36, 0, 9, 22, STEEL), PR(14, 34, 0, 8, 20, STEEL)],
+    b_saw: [CY(0, 0, 0, 23, 12, STEEL2, { rx: UP, k: 1.04 }),
+      CN(30, 0, 2, 7, 15, STEEL, { rz: -UP + 0.5, ink: 0.8 }), CN(-30, 0, 2, 7, 15, STEEL, { rz: UP - 0.5, ink: 0.8 }),
+      CN(0, 30, 2, 7, 15, STEEL, { ink: 0.8 }), CN(0, -30, 2, 7, 15, STEEL, { rx: Math.PI, ink: 0.8 }),
+      CN(22, 22, 2, 7, 15, STEEL, { rz: 0.78, ink: 0.8 }), CN(-22, 22, 2, 7, 15, STEEL, { rz: -0.78, ink: 0.8 }),
+      CN(22, -22, 2, 7, 15, STEEL, { rz: -0.78, ink: 0.8 }), CN(-22, -22, 2, 7, 15, STEEL, { rz: 0.78, ink: 0.8 }),
+      CY(0, 0, 6, 10, 10, '#ff5d73', { rx: UP, k: 1.2 }),
+      S(0, 0, 12, 6, '#ffd166', { ink: 0, k: 1.3 })],
+    b_mount: [B(0, 0, 0, 32, 24, 28, '#6b5a78'), B(0, 15, 0, 24, 11, 22, STEEL2)],
+    b_cone: [CN(0, 16, 0, 15, 36, '#ff8a4c'), B(0, -14, 0, 42, 15, 36, '#e8ecf2'),
+      B(0, 6, 0, 24, 7, 22, '#f4f8ff', { ink: 0.7 })],
+    b_monitor: [B(0, 6, 0, 54, 42, 28, '#3a3a4a'), BX(0, 8, 15, 44, 32, 7, '#120c1a', { ink: 0.6, k: 1.3 }),
+      B(-11, 10, 19, 9, 15, 4, '#7ff0a8', { ink: 0.3, k: 1.3 }), B(0, 10, 19, 9, 15, 4, '#ff5d73', { ink: 0.3, k: 1.3 }),
+      B(11, 10, 19, 9, 15, 4, '#ffe27a', { ink: 0.3, k: 1.3 }),
+      B(0, -24, 0, 22, 11, 22, '#4a4a5e')],
+    b_nft: [B(0, 0, 0, 48, 54, 15, '#ffd166'), B(0, 0, 9, 36, 42, 9, '#6b3d7a'),
+      GM(0, 4, 15, 20, 24, 14, '#ff9dbd', { k: 1.2 })],
+    b_rug: [B(0, 0, 0, 62, 22, 28, '#b2546f'), B(0, 14, 0, 54, 9, 24, '#8f3f5a', { ink: 0.8 }),
+      B(26, -13, 0, 22, 7, 17, '#e8c878', { ink: 0.7 })],
+    b_engine: [B(0, -6, 0, 54, 46, 36, '#ff5d73'), CY(-19, 22, 0, 10, 22, STEEL), CY(19, 22, 0, 10, 22, STEEL),
+      BX(0, -4, 19, 36, 12, 7, '#151020', { ink: 0.6, k: 1.3 }),
+      B(-28, -26, 0, 13, 16, 22, STEEL2), B(28, -26, 0, 13, 16, 22, STEEL2)],
+    b_candle: [B(0, -6, 0, 32, 52, 32, '#ff5d73'), B(0, 26, 0, 6, 13, 6, DARK, { ink: 0.5 }),
+      CN(0, 40, 0, 11, 22, '#ffd166', { k: 1.2 }),
+      B(-18, -28, 0, 13, 6, 13, '#7ff0a8', { ink: 0.6 }), B(18, 20, 0, 13, 6, 13, '#ff2e88', { ink: 0.6 })],
+    b_atm: [B(0, 0, 0, 48, 58, 32, '#7fd48a'), BX(0, 13, 17, 34, 23, 7, '#120c1a', { ink: 0.6, k: 1.3 }),
+      B(0, -11, 19, 28, 9, 7, '#f4f8ff', { ink: 0.7 }),
+      B(-14, -24, 17, 9, 7, 5, '#ffd166', { ink: 0.4 }), B(-4, -24, 17, 9, 7, 5, '#ffd166', { ink: 0.4 }),
+      B(6, -24, 17, 9, 7, 5, '#ffd166', { ink: 0.4 })]
   };
 }
 
 function castBoss() {
   return {
-    boss0: [B(0, 0, 0, 78, 108, 30, '#1a1224'), B(0, 4, 16, 66, 92, 8, '#2b1638'),
-      B(0, 44, 18, 40, 10, 6, '#ff5d73'), B(0, -46, 18, 52, 8, 6, '#7ff0a8'),
-      CN(-16, 62, 0, 9, 20, '#ffd166'), CN(0, 66, 0, 9, 24, '#ffd166'), CN(16, 62, 0, 9, 20, '#ffd166'),
-      OC(0, 56, 0, 22, 8, '#ffd166')],
-    boss1: [B(0, 0, 0, 84, 96, 34, '#121a2a'), B(0, 2, 18, 72, 80, 8, '#1a2a44'),
-      B(0, 40, 20, 44, 10, 6, '#8fd6ff'), B(0, -40, 20, 44, 8, 6, '#7ff0a8'),
-      CN(-18, 56, 0, 9, 22, '#8fd6ff'), CN(0, 60, 0, 9, 26, '#8fd6ff'), CN(18, 56, 0, 9, 22, '#8fd6ff')],
-    boss_eye: [S(0, 0, 0, 26, '#f4f8ff'), S(0, 0, 16, 13, '#3f8fd6'), S(0, 0, 22, 7, DARK), S(-8, 8, 20, 4, '#ffffff', { k: 1.2 })],
-    boss_badge0: [S(0, 0, 0, 15, '#ff5d73'), B(0, 0, 10, 14, 5, 4, '#ffffff')],
-    boss_badge1: [S(0, 0, 0, 15, '#3f8fd6'), B(-5, 0, 10, 6, 12, 4, '#ffffff', { rz: 0.6 }), B(4, -4, 10, 12, 5, 4, '#ffffff', { rz: -0.4 })],
-    boss_badge2: [S(0, 0, 0, 15, '#ffd166'), PR(0, 0, 10, 8, 10, '#22131f', { rx: Math.PI })],
-    boss_badge3: [S(0, 0, 0, 15, '#7ff0a8'), B(0, 4, 10, 14, 4, 4, '#22131f'), B(0, -4, 10, 14, 4, 4, '#22131f')],
-    boss_badge4: [S(0, 0, 0, 15, '#c9a8e8'), S(-5, 3, 12, 4, '#22131f'), S(5, 3, 12, 4, '#22131f')],
-    hole: [S(0, 0, 0, 24, '#0d0812'), RG(0, 0, 6, 24, '#a05ae0')],
-    holering: [RG(0, 0, 0, 26, '#a05ae0', { rx: UP }), RG(0, 0, 0, 20, '#c9a8e8', { rx: UP })]
+    boss0: [B(0, 0, 0, 80, 110, 32, '#2c1c3e'), BX(0, 4, 15, 72, 100, 8, '#1d1130', { ink: 1.6 }),
+      BX(0, 4, 19, 66, 92, 7, '#472a6b', { ink: 0.6, k: 1.35 }),
+      B(0, 48, 22, 44, 11, 7, '#ff5d73', { ink: 0.6, k: 1.25 }), B(0, -50, 22, 56, 9, 7, '#7ff0a8', { ink: 0.6, k: 1.25 }),
+      S(0, 60, 22, 8, '#8fd6ff', { ink: 0.5, k: 1.2 }),
+      CN(-17, 64, 0, 10, 22, '#ffd166'), CN(0, 68, 0, 10, 26, '#ffd166'), CN(17, 64, 0, 10, 22, '#ffd166'),
+      OC(0, 57, 0, 23, 9, '#ffd166')],
+    boss1: [B(0, 0, 0, 86, 98, 36, '#1b2942'), BX(0, 2, 17, 78, 88, 8, '#0f1a2c', { ink: 1.6 }),
+      BX(0, 2, 21, 72, 80, 7, '#2e5688', { ink: 0.6, k: 1.3 }),
+      B(0, 44, 23, 48, 11, 7, '#8fd6ff', { ink: 0.6, k: 1.25 }), B(0, -44, 22, 48, 9, 7, '#7ff0a8', { ink: 0.6, k: 1.25 }),
+      CN(-19, 58, 0, 10, 24, '#8fd6ff'), CN(0, 62, 0, 10, 28, '#8fd6ff'), CN(19, 58, 0, 10, 24, '#8fd6ff')],
+    boss_eye: [BA(0, 0, 0, 30, CREAM), S(0, 0, 17, 15, '#3f8fd6', { ink: 0.6 }), S(0, 0, 23, 8, DARK, { ink: 0 }),
+      S(-8, 8, 21, 8, '#ffffff', { ink: 0, k: 1.35 })],
+    boss_badge0: [BA(0, 0, 0, 17, '#ff5d73', { k: 1.1 }), B(0, 0, 11, 15, 5, 4, '#ffffff', { ink: 0, k: 1.3 })],
+    boss_badge1: [BA(0, 0, 0, 17, '#3f8fd6', { k: 1.1 }), B(-5, 0, 11, 7, 13, 4, '#ffffff', { rz: 0.6, ink: 0, k: 1.3 }),
+      B(4, -4, 11, 13, 5, 4, '#ffffff', { rz: -0.4, ink: 0, k: 1.3 })],
+    boss_badge2: [BA(0, 0, 0, 17, '#ffd166', { k: 1.1 }), PR(0, 0, 11, 9, 11, '#22131f', { rx: Math.PI, ink: 0.5 })],
+    boss_badge3: [BA(0, 0, 0, 17, '#7ff0a8', { k: 1.1 }), B(0, 4, 11, 15, 4.4, 4, '#22131f', { ink: 0.4 }),
+      B(0, -4, 11, 15, 4.4, 4, '#22131f', { ink: 0.4 })],
+    boss_badge4: [BA(0, 0, 0, 17, '#c9a8e8', { k: 1.1 }), S(-5, 3, 13, 8, '#22131f', { ink: 0 }), S(5, 3, 13, 8, '#22131f', { ink: 0 })],
+    hole: [BA(0, 0, 0, 26, '#0d0812'), RG(0, 0, 7, 26, '#a05ae0', { k: 1.3 })],
+    holering: [RG(0, 0, 0, 28, '#a05ae0', { rx: UP, k: 1.25 }), RG(0, 0, 0, 22, '#c9a8e8', { rx: UP, k: 1.3 })]
   };
 }
 
@@ -994,12 +1352,14 @@ const MODES = {
   ohio:    { name: 'OHIO',    speed: 1.08, density: 1.25, dmg: 1, eventEvery: 6,  bossEvery: BOSS_EVERY * 0.85, sky: 2, grav: 1.2, coin: 0.9 },
   zen:     { name: 'ZEN',     speed: 0.82, density: 0.70, dmg: 0, eventEvery: 26, bossEvery: BOSS_EVERY * 1.6, sky: 3, coin: 1.2 }
 };
+/* Each sky runs dark at the top of the screen to a lit horizon, with the last
+   stop doubling as the horizon haze colour the ground is seated in. */
 const SKIES = [
-  [['#4aa8e8', 0], ['#8fd0ff', .22], ['#cdeaff', .46], ['#ffe0ee', .66], ['#ffc0da', .84], ['#ffb0cf', 1]],
-  [['#7b2d6b', 0], ['#c9366f', .24], ['#ff6f61', .5], ['#ffb36b', .72], ['#ffd166', .88], ['#ffe9a8', 1]],
-  [['#1b0f3a', 0], ['#3a1d63', .24], ['#6b2f9c', .46], ['#c9366f', .68], ['#ff5d73', .86], ['#ff9dbd', 1]],
-  [['#9fd6e8', 0], ['#cfe9f5', .24], ['#e8f3f0', .48], ['#ffeef5', .7], ['#ffe0ee', .88], ['#fff5fa', 1]],
-  [['#05130c', 0], ['#0b2a17', .22], ['#114527', .44], ['#16a34a', .68], ['#7ff0a8', .86], ['#d8ffe6', 1]]
+  [['#2f86d8', 0], ['#5fadf0', .26], ['#9fd2f8', .48], ['#d6ecfd', .66], ['#ffdfec', .84], ['#ffc6dc', 1]],
+  [['#4a1f5e', 0], ['#8b2c6e', .24], ['#d14a63', .46], ['#ff7f5f', .64], ['#ffbe68', .82], ['#ffe6ac', 1]],
+  [['#120a2c', 0], ['#28134c', .24], ['#54217e', .44], ['#962f84', .62], ['#d43a72', .8], ['#ff7fa2', 1]],
+  [['#8fcbe0', 0], ['#bfe3f0', .26], ['#dff0f2', .48], ['#f6f2f8', .68], ['#ffe8f2', .86], ['#fff3fa', 1]],
+  [['#04120b', 0], ['#0a2415', .26], ['#123c22', .48], ['#1c7a3c', .7], ['#4fd07a', .86], ['#a8f0c0', 1]]
 ];
 
 const WEAPONS = {
@@ -2248,16 +2608,26 @@ function drawSpeedLine() { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 100, 3); }
    2c. world art bake sources (parallax layers, ground, sky pieces)
    Local origin: ground line = y 0, layer items sit above it.
    ============================================================ */
+/* every land layer is drawn twice: once shifted up in a pale tone, then the
+   body on top, which leaves a rim of light along the ridge. Cheap aerial
+   perspective, and it stops the far layers reading as flat cut-outs. */
+function ridgePath(spread, h0, h1, r1, r2) {
+  ctx.beginPath();
+  ctx.moveTo(-spread, 20);
+  ctx.quadraticCurveTo(-spread * 0.42, -h0, spread * 0.2, -h1);
+  ctx.quadraticCurveTo(spread * 0.62, 10, spread * 1.36, 20);
+  ctx.closePath();
+}
 function bakeMound(v) {
   const r1 = hash(v * 3 + 1), r2 = hash(v * 7 + 5);
   ctx.globalAlpha = 1;
-  ctx.fillStyle = '#e8b4d0';
-  ctx.beginPath();
-  ctx.moveTo(-220, 20);
-  ctx.quadraticCurveTo(-90, -130 - r1 * 90, 60, -40 - r2 * 60);
-  ctx.quadraticCurveTo(170, 10, 300, 20);
-  ctx.closePath();
-  ctx.fill();
+  ridgePath(220, 130 + r1 * 90, 40 + r2 * 60, r1, r2);
+  ctx.save(); ctx.translate(0, -7);
+  ctx.fillStyle = '#fbd8ea'; ctx.fill(); ctx.restore();
+  const q = ctx.createLinearGradient(0, -200, 0, 20);
+  q.addColorStop(0, '#e9b6d6'); q.addColorStop(0.6, '#d79cc4'); q.addColorStop(1, '#bd82b4');
+  ridgePath(220, 130 + r1 * 90, 40 + r2 * 60, r1, r2);
+  ctx.fillStyle = q; ctx.fill();
 }
 function bakeMonument(kind) {
   ctx.fillStyle = '#c98cb8'; ctx.strokeStyle = '#c98cb8';
@@ -2286,15 +2656,22 @@ function bakeMonument(kind) {
 }
 function bakeHill(v) {
   const r1 = hash(v * 5 + 11);
-  const q = ctx.createLinearGradient(0, -190, 0, 20);
-  q.addColorStop(0, '#b6ead0'); q.addColorStop(1, '#7fd3a8');
-  ctx.fillStyle = q;
-  ctx.beginPath();
-  ctx.moveTo(-190, 20);
-  ctx.quadraticCurveTo(-40, -120 - r1 * 110, 90, -30 - r1 * 40);
-  ctx.quadraticCurveTo(160, 12, 250, 20);
-  ctx.closePath();
-  ctx.fill();
+  const h0 = 120 + r1 * 110, h1 = 30 + r1 * 40;
+  ridgePath(190, h0, h1, r1, r1);
+  ctx.save(); ctx.translate(0, -6);
+  ctx.fillStyle = '#d6f5e2'; ctx.fill(); ctx.restore();
+  const q = ctx.createLinearGradient(0, -h0, 0, 20);
+  q.addColorStop(0, '#93ddba'); q.addColorStop(0.45, '#74cba2'); q.addColorStop(1, '#4e9f86');
+  ridgePath(190, h0, h1, r1, r1);
+  ctx.fillStyle = q; ctx.fill();
+  /* a few bush silhouettes on the ridge so the mid layer has texture */
+  ctx.save(); ridgePath(190, h0, h1, r1, r1); ctx.clip();
+  ctx.fillStyle = rgba('#3f8a70', 0.5);
+  for (let i = 0; i < 7; i++) {
+    const x = -170 + hash(i * 7 + v * 13) * 380, y = -20 - hash(i * 3 + v) * (h0 * 0.7);
+    ell(x, y, 12 + hash(i) * 16, 5 + hash(i * 5) * 6); ctx.fill();
+  }
+  ctx.restore();
 }
 function bakeBill(word) {
   rrPath(-34, -30, 68, 40, 8); sticker('#fff3e2', { pad: 4 });
@@ -2302,13 +2679,21 @@ function bakeBill(word) {
   txt(word, 0, -10, { size: 12, color: '#e8618c', stroke: false });
 }
 function bakeCloud() {
-  ctx.beginPath();
-  ctx.ellipse(-30, 8, 28, 19, 0, 0, TAU);
-  ctx.ellipse(2, -6, 34, 25, 0, 0, TAU);
-  ctx.ellipse(34, 6, 28, 18, 0, 0, TAU);
-  ctx.ellipse(6, 12, 32, 16, 0, 0, TAU);
-  ctx.fillStyle = '#fff'; ctx.fill();
-  ell(0, 18, 30, 6); ctx.fillStyle = 'rgba(190,160,180,0.35)'; ctx.fill();
+  const lumps = () => {
+    ctx.beginPath();
+    ctx.ellipse(-30, 8, 28, 19, 0, 0, TAU);
+    ctx.ellipse(2, -6, 34, 25, 0, 0, TAU);
+    ctx.ellipse(34, 6, 28, 18, 0, 0, TAU);
+    ctx.ellipse(6, 12, 32, 16, 0, 0, TAU);
+    ctx.closePath();
+  };
+  lumps(); fillc('rgba(150,120,160,0.30)');      // the drop, so it sits in the air
+  ctx.save(); ctx.translate(0, -2.5);
+  lumps(); ctx.fillStyle = '#fffdf8'; ctx.fill();  // the sunlit top
+  ctx.restore();
+  ctx.save(); lumps(); ctx.clip();
+  ell(0, 20, 34, 9); ctx.fillStyle = 'rgba(178,150,190,0.45)'; ctx.fill();
+  ctx.restore();
   circ(-8, 0, 3.4); fillc('#7a5a6c');
   circ(10, 0, 3.4); fillc('#7a5a6c');
   ctx.beginPath(); ctx.arc(1, 7, 8, 0.2, Math.PI - 0.2); line(2.4, '#7a5a6c');
@@ -2336,14 +2721,11 @@ function bakeEye(shut) {
   circ(0, 0, r * 0.26); fillc('#241428');
   circ(-r * 0.17, -r * 0.19, r * 0.15); fillc('#fff');
   ctx.restore();
-  ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.lineCap = 'round';
-  for (let v = -1; v <= 1; v++) {
-    const a = -Math.PI / 2 + v * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * r * 0.96, Math.sin(a) * r * 0.96 * k);
-    ctx.lineTo(Math.cos(a) * (r * 1.26), Math.sin(a) * (r * 1.26) * k);
-    ctx.stroke();
-  }
+  /* the lid: a lid, not a sea urchin */
+  ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r * 1.02, -r * 0.16 * k); ctx.quadraticCurveTo(0, -r * 1.24 * k, r * 1.02, -r * 0.16 * k);
+  ctx.stroke();
 }
 function bakeWordSprite(w) {
   txt(w, 0, 0, { size: 26, color: '#fff', stroke: '#c9739a', lw: 6 });
@@ -2383,53 +2765,79 @@ function bakeShaft() {
   ctx.fill();
 }
 function bakeBand(col) {
-  ctx.fillStyle = col;
+  /* a high streak of atmosphere: faded at both ends so it never reads as a bar */
+  const q = ctx.createLinearGradient(0, 0, 400, 0);
+  q.addColorStop(0, rgba(col, 0)); q.addColorStop(0.28, rgba(col, 0.85));
+  q.addColorStop(0.72, rgba(col, 0.85)); q.addColorStop(1, rgba(col, 0));
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  for (let x = 0; x <= 400; x += 20) ctx.lineTo(x, Math.sin(x * 0.016) * 20);
-  ctx.lineTo(400, 46); ctx.lineTo(0, 46);
-  ctx.closePath(); ctx.fill();
+  ctx.moveTo(0, 26);
+  for (let x = 0; x <= 400; x += 16) ctx.lineTo(x, 22 + Math.sin(x * 0.016) * 16);
+  for (let x = 400; x >= 0; x -= 16) ctx.lineTo(x, 30 + Math.sin(x * 0.016) * 16);
+  ctx.closePath();
+  ctx.fillStyle = q; ctx.fill();
 }
+/* The stage floor: a sunlit grass edge, a saturated grass body, then laid soil.
+   Tiles every 88 world px, so everything in it is periodic at 88. */
 function bakeRoadTile() {
-  for (let i = 0; i < 2; i++) {
-    const X = i * 44;
-    const q = ctx.createLinearGradient(0, 0, 0, 26);
-    q.addColorStop(0, (i & 1) ? '#b7f0d1' : '#ffe0cd');
-    q.addColorStop(1, (i & 1) ? '#8adcb0' : '#f7bfa4');
-    ctx.fillStyle = q;
-    ctx.fillRect(X, 0, 44, 26);
-    ctx.fillStyle = rgba('#3a2340', 0.13);
-    ctx.fillRect(X, 0, 2.5, 26);
-    ctx.fillStyle = rgba('#fff', 0.35);
-    ctx.fillRect(X + 5, 6, 32, 2);
-    if ((i % 2) === 0) { ctx.fillStyle = rgba('#fff', 0.45); ctx.fillRect(X + 6, 12, 22, 2.5); }
+  const g = ctx.createLinearGradient(0, 0, 0, 22);
+  g.addColorStop(0, '#c6ee8e'); g.addColorStop(0.30, '#8ed96e'); g.addColorStop(1, '#3f9a55');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 88, 22);
+  ctx.fillStyle = '#f6ffe2'; ctx.fillRect(0, 0, 88, 2.6);           // the sunlit lip
+  ctx.fillStyle = rgba('#2c6f3f', 0.30); ctx.fillRect(0, 20.5, 88, 2.5);
+  for (let i = 0; i < 11; i++) {                                     // blade notches
+    const x = i * 8 + hash(i * 5) * 5;
+    poly([[x, 0], [x + 2.4, 0], [x + 1.2, -3 - hash(i) * 3]]);
+    fillc('#d8f7a8');
   }
-  ctx.fillStyle = rgba('#fff', 0.85); ctx.fillRect(0, 0, 88, 3);
-  ctx.fillStyle = '#5d9d7c'; ctx.fillRect(0, 26, 88, 8);
-  ctx.fillStyle = rgba('#20131f', 0.45); ctx.fillRect(0, 34, 88, 7);
+  const s = ctx.createLinearGradient(0, 20, 0, 46);                  // the soil
+  s.addColorStop(0, '#7a5136'); s.addColorStop(0.55, '#5b3a2e'); s.addColorStop(1, '#402a28');
+  ctx.fillStyle = s; ctx.fillRect(0, 22, 88, 24);
+  ctx.fillStyle = rgba('#2a1a20', 0.55);                             // the seam under the turf
+  ctx.fillRect(0, 22, 88, 2.2);
+  for (let r = 0; r < 2; r++) {                                      // brick courses
+    const y = 26 + r * 9;
+    ctx.fillStyle = rgba('#a8763f', 0.22 - r * 0.06);
+    for (let i = 0; i < 3; i++) ctx.fillRect(i * 29 + (r ? 14 : 0), y, 27, 7);
+    ctx.fillStyle = rgba('#241618', 0.35);
+    for (let i = 0; i < 3; i++) ctx.fillRect(i * 29 + (r ? 14 : 0) - 1.5, y, 1.5, 7);
+  }
 }
+/* The earth under the stage: warm soil, laid strata (periodic at 300 so the
+   tiles join), pebbles and buried bling. */
 function bakeStrata() {
   const q = ctx.createLinearGradient(0, 0, 0, 460);
-  q.addColorStop(0, '#7e5f9c'); q.addColorStop(0.18, '#5d4378');
-  q.addColorStop(0.6, '#3b2a4e'); q.addColorStop(1, '#1e1428');
+  q.addColorStop(0, '#7d5539'); q.addColorStop(0.16, '#63402f');
+  q.addColorStop(0.52, '#4a3038'); q.addColorStop(1, '#2a1b28');
   ctx.fillStyle = q; ctx.fillRect(0, 0, 300, 460);
-  ctx.globalAlpha = 0.22;
-  [46, 102, 170].forEach((yy, i) => {
-    ctx.strokeStyle = ['#a98cc4', '#8a6ba6', '#6b4f88'][i];
-    ctx.lineWidth = 2 + i;
-    ctx.beginPath();
-    for (let x = 0; x <= 300; x += 20) {
-      const y = yy + Math.sin(x * 0.021 + i) * 6;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  });
+  ctx.fillStyle = rgba('#a8763f', 0.22); ctx.fillRect(0, 0, 300, 30);
+  ctx.globalAlpha = 0.42;
+  /* the strata run past the tile box into the bake pad, so the box edge is a
+     mid-stroke pixel and the tiles join without a seam */
+  [[52, '#c9905f', 3], [124, '#a8715a', 2], [198, '#8a5f6e', 5], [288, '#75506f', 3], [372, '#5f4066', 5], [430, '#4d3560', 2]]
+    .forEach(([yy, cc, lw], i) => {
+      ctx.strokeStyle = cc; ctx.lineWidth = lw;
+      ctx.beginPath();
+      for (let x = -8; x <= 308; x += 10) {
+        const y = yy + Math.sin(x * (TAU * (i + 1) / 2) / 300 + i * 1.7) * 7;
+        x === -8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+  ctx.globalAlpha = 0.5;
+  for (let i = 0; i < 5; i++) {                    // buried pipes, the stage's plumbing
+    const x = 24 + hash(i * 17 + 5) * 250, y = 96 + hash(i * 7 + 3) * 300;
+    ctx.strokeStyle = rgba('#2c1d2a', 0.55); ctx.lineWidth = 9; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 46 + hash(i) * 40, y + 10); ctx.stroke();
+    ctx.strokeStyle = rgba('#8a6a7c', 0.35); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(x, y - 2); ctx.lineTo(x + 40 + hash(i) * 36, y + 8); ctx.stroke();
+  }
   ctx.globalAlpha = 1;
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 30; i++) {                                    // stones
     const r1 = hash(i * 7 + 3), r2 = hash(i * 11 + 9), r3 = hash(i * 3 + 5);
-    if (r1 > 0.62) {
-      ctx.fillStyle = rgba('#a98cc4', 0.32 - r3 * 0.18);
-      ell(r2 * 290 + 5, 52 + r3 * 210, 4 + r1 * 8, (4 + r1 * 8) * 0.72);
+    if (r1 > 0.42) {
+      const rx = 3 + r1 * 8;
+      ell(14 + r2 * 272, 56 + r3 * 390, rx, rx * 0.72);
+      ctx.fillStyle = rgba(r3 > 0.62 ? '#c8a07c' : '#3a2434', 0.34 - r3 * 0.12);
       ctx.fill();
     }
   }
@@ -2445,22 +2853,19 @@ function bakeFlower(col) {
   circ(0, 0, 1.8); fillc('#fff7d6');
 }
 function bakeBling(i) {
-  const col = ['#ff9dbd', '#8fe3d0', '#ffd166'][i % 3];
-  poly([[0, -9], [5, 0], [0, 9], [-5, 0]]);
+  const col = ['#ffd166', '#8fe3d0', '#ff9dbd'][i % 3];
+  poly([[0, -8], [4.4, 0], [0, 8], [-4.4, 0]]);
   ctx.fillStyle = col; ctx.fill();
-  ctx.strokeStyle = rgba('#fff', 0.6); ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = rgba('#fffdf0', 0.75); ctx.lineWidth = 1.2; ctx.stroke();
 }
 function bakeCeilingStrip() {
   const q = ctx.createLinearGradient(0, -120, 0, 0);
-  q.addColorStop(0, '#3b2a4e'); q.addColorStop(1, '#7e5f9c');
+  q.addColorStop(0, '#1d1324'); q.addColorStop(1, '#573630');
   ctx.fillStyle = q; ctx.fillRect(0, -120, 88, 120);
-  for (let i = 0; i < 2; i++) {
-    ctx.fillStyle = (i & 1) ? '#b7f0d1' : '#ffe0cd';
-    ctx.fillRect(i * 44, -24, 44, 24);
-    ctx.fillStyle = rgba('#3a2340', 0.13);
-    ctx.fillRect(i * 44, -24, 2.5, 24);
-  }
-  ctx.fillStyle = rgba('#fff', 0.85); ctx.fillRect(0, -3, 88, 3);
+  ctx.fillStyle = '#5b3a2e'; ctx.fillRect(0, -26, 88, 24);
+  ctx.fillStyle = '#3f9a55'; ctx.fillRect(0, -6, 88, 6);
+  ctx.fillStyle = rgba('#f6ffe2', 0.85); ctx.fillRect(0, -3, 88, 2.6);
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = rgba('#a8763f', 0.2); ctx.fillRect(i * 29, -22, 27, 8); }
 }
 function bakeBossPhone(kind) {
   // kind 0: THE ALGORITHM (phone + eye + crown)   kind 1: THE WHALE (chart terminal)
@@ -2681,12 +3086,25 @@ const O = o => Object.assign({ s: S }, o || {});
   ['#ff5d73', '#ffd166', '#fff', '#c9a8e8', '#7ff0a8'].forEach((col, i) => B.add('fl' + i, [-8, -8, 16, 16], () => bakeFlower(col), { s: 1.5 }));
   for (let i = 0; i < 3; i++) B.add('bg' + i, [-9, -12, 18, 24], () => bakeBling(i), { s: 1.5 });
   SKIES.forEach((stops, i) => {
-    B.add('sky' + i, [0, 0, 8, 512], () => {
-      const q = ctx.createLinearGradient(0, 0, 0, 512);
+    B.add('sky' + i, [0, 0, 8, 1024], () => {
+      const q = ctx.createLinearGradient(0, 0, 0, 1024);
       for (const s of stops) q.addColorStop(s[1], s[0]);
-      ctx.fillStyle = q; ctx.fillRect(0, 0, 8, 512);
+      ctx.fillStyle = q; ctx.fillRect(0, 0, 8, 1024);
     }, { s: 1 });
   });
+  /* the horizon haze: the band the ground is seated in, and the bottom of the
+     screen falling into shadow */
+  B.add('haze', [0, 0, 16, 128], () => {
+    const q = ctx.createLinearGradient(0, 128, 0, 0);
+    q.addColorStop(0, 'rgba(255,255,255,0.95)'); q.addColorStop(0.45, 'rgba(255,255,255,0.42)');
+    q.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = q; ctx.fillRect(0, 0, 16, 128);
+  }, { s: 1 });
+  B.add('vigb', [0, 0, 16, 128], () => {
+    const q = ctx.createLinearGradient(0, 0, 0, 128);
+    q.addColorStop(0, 'rgba(14,7,20,0)'); q.addColorStop(1, 'rgba(14,7,20,0.55)');
+    ctx.fillStyle = q; ctx.fillRect(0, 0, 16, 128);
+  }, { s: 1 });
   B.add('vig', [0, 0, 256, 256], () => {
     const q = ctx.createRadialGradient(128, 128, 40, 128, 128, 128);
     q.addColorStop(0, 'rgba(60,20,50,0)');
@@ -2728,15 +3146,15 @@ function labelSprite(label) {
   let cached = textCache.get('l|' + label);
   if (cached) return cached;
   const T = AT.text, c = T.c;
-  c.font = '600 11px Fredoka, ui-rounded, sans-serif';
-  const w = Math.ceil(c.measureText(label).width) + 22, h = 20;
+  c.font = '700 10px Fredoka, ui-rounded, sans-serif';
+  const w = Math.ceil(c.measureText(label).width) + 17, h = 16;
   const nm = 'lbl' + textCache.size;
   const s = T.add(nm, [-w / 2, -h / 2, w, h], () => {
     rrPath(-w / 2, -h / 2, w, h, h / 2);
-    sticker('rgba(255,252,250,0.95)', { pad: 3, lw: 1.4 });
-    ctx.font = '600 11px Fredoka, ui-rounded, sans-serif';
+    sticker('rgba(255,252,250,0.9)', { pad: 2.4, lw: 1.2 });
+    ctx.font = '700 10px Fredoka, ui-rounded, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#8a5f76'; ctx.fillText(label, 0, 0);
+    ctx.fillStyle = '#6b4560'; ctx.fillText(label, 0, 0.5);
   }, { s: 1 });
   if (s) { textCache.set('l|' + label, nm); return nm; }
   return null;
@@ -2847,52 +3265,66 @@ function repeat(n, spacing, factor, drawOne, t) {
 }
 
 /* ---------------- sky + background ---------------- */
+/* the world is baked once in one palette, so each mode re-lights it by tint:
+   one colour family from the sky down to the soil */
+const LTINT = { classic: WHITE, degen: [0.72, 1.06, 0.74], chaos: [1.10, 0.92, 0.84], ohio: [1.04, 0.80, 1.16], zen: [1.02, 1.00, 1.04] };
+const STINT = { classic: WHITE, degen: [0.80, 1.10, 0.66], chaos: [1.12, 0.98, 0.86], ohio: [1.12, 0.84, 1.06], zen: WHITE };
+const lt = () => LTINT[mode] || WHITE;
+const st = () => STINT[mode] || WHITE;
 function drawSky(t) {
   const sky = SPR['sky' + ((MODES[mode] || MODES.classic).sky)];
   if (sky) s8('sky' + ((MODES[mode] || MODES.classic).sky), 0, 0, W, H, 0, WHITE, 1);
   const sx0 = W * 0.86, sy0 = H * 0.15;
+  const lc = st();
   const ss = clamp(H / 700, 0.5, 1.3);
   for (let i = 0; i < (QUAL.sh ? 4 : 0); i++) {
     const a = -0.55 + i * 0.42 + Math.sin(t * 0.25 + i) * 0.05;
-    pushS(0, true, 'shaft', sx0, sy0, 156 * ss, 764 * ss, a, [1, 1, 0.85], 0.06);
+    pushS(0, true, 'shaft', sx0, sy0, 156 * ss, 764 * ss, a, lc, 0.06);
   }
   if (QUAL.band) {
-    for (let i = 0; i < 3; i++) {
-      const yy = H * (0.30 + i * 0.10) + Math.sin(t * 0.4 + i) * 10 - 20;
-      const ox = -((camX * 0.02) % 412) - 6;
-      s8('band' + i, ox, yy, 412 * (W / 1200 + 0.6), 58, 0, WHITE, 0.10);
-      s8('band' + i, ox + 412 * (W / 1200 + 0.6), yy, 412 * (W / 1200 + 0.6), 58, 0, WHITE, 0.10);
+    for (let i = 0; i < 4; i++) {
+      const yy = H * (0.20 + i * 0.11) + Math.sin(t * 0.35 + i) * 12 - 20;
+      const w = 412 * (W / 1200 + 0.6);
+      const ox = -((camX * (0.014 + i * 0.006)) % w) - 6;
+      s8('band' + (i % 3), ox, yy, w, 52, 0, WHITE, 0.055);
+      s8('band' + (i % 3), ox + w, yy, w, 52, 0, WHITE, 0.055);
     }
   }
   const rs = clamp(H / 900, 0.55, 1.15);
-  pushS(0, true, 'glow', sx0, sy0, 320 * rs, 320 * rs, 0, tint('#fff0a8'), 0.5);
-  pushS(0, false, 'rays', sx0, sy0, 148 * rs, 148 * rs, t * 0.12, WHITE, 0.9);
-  pushS(0, false, 'sun', sx0, sy0, 96 * rs, 96 * rs, 0, WHITE, 1);
+  pushS(0, true, 'glow', sx0, sy0, 320 * rs, 320 * rs, 0, tint('#fff0a8'), 0.42);
+  pushS(0, false, 'rays', sx0, sy0, 148 * rs, 148 * rs, t * 0.12, lc, 0.85);
+  pushS(0, false, 'sun', sx0, sy0, 96 * rs, 96 * rs, 0, lc, 1);
+  /* the horizon haze, in the colour of the sky's lowest stop, so the ground
+     joins the sky instead of being pasted under it */
+  const sk = SKIES[(MODES[mode] || MODES.classic).sky] || SKIES[0];
+  s8('haze', 0, GROUND - 116, W, 116, 0, tint(sk[sk.length - 1][0]), 0.55);
 }
 function drawFarLayer(t) {
   const n = layerCount(300);
   repeat(n, 300, 0.055, (x, i) => {
     const v = Math.floor(hash(i * 3 + 1) * 4);
-    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, WHITE, 0.5);
+    const c = lt();
+    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, c, 0.5);
     const mon = Math.floor(hash(i * 11 + 2) * 13);
     if (mon < 3) {
       const kinds = ['toilet', 'crew', 'crown', 'arch', 'eye'];
       const kind = kinds[Math.floor(hash(i * 13 + 4) * 5)];
       const r1 = hash(i * 3 + 1), r2 = hash(i * 7 + 5);
       pushW(0, false, 'mon_' + kind, camX + (x + 40 + r1 * 90) / SC, (-30 - r2 * 40) / SC,
-        SPR['mon_' + kind].w, SPR['mon_' + kind].h, 0, WHITE, 0.42);
+        SPR['mon_' + kind].w, SPR['mon_' + kind].h, 0, c, 0.42);
     }
   }, t);
 }
 function drawMidLayer(t) {
   const n = layerCount(240);
   repeat(n, 240, 0.16, (x, i) => {
-    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, WHITE, 0.72);
+    const c = lt();
+    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, c, 0.72);
     if (hash(i * 19 + 3) > 0.55) {
       const r1 = hash(i * 5 + 11);
       const bx = x + 30 + r1 * 80, by = -90 - hash(i * 23) * 60;
       pushW(0, false, 'bill' + (Math.floor(hash(i * 31) * 6) % 6), camX + bx / SC, by / SC,
-        92, 96, (hash(i * 29) - 0.5) * 0.16, WHITE, 1);
+        92, 96, (hash(i * 29) - 0.5) * 0.16, c, 1);
     }
   }, t);
 }
@@ -2901,17 +3333,20 @@ function drawCloudLayer(t) {
   repeat(n, 280, 0.3, (x, i) => {
     const y = 50 + hash(i * 3) * (H * 0.36);
     const s = 0.6 + hash(i * 7) * 0.8;
-    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 6, 104 * s, 72 * s, 0, WHITE, 0.95);
+    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 6, 104 * s, 72 * s, 0, lt(), 0.92);
   }, t);
 }
 function drawEyeLayer(t) {
   const n = layerCount(430);
   repeat(n, 430, 0.42, (x, i) => {
     const y = 70 + hash(i * 13) * (H * 0.34);
-    const r = 15 + hash(i * 17) * 16;
+    const r = 11 + hash(i * 17) * 12;
     const shut = Math.sin(t * 1.5 + i * 2) > 0.94;
     const s = r / 26;
-    pushS(0, false, shut ? 'eye1' : 'eye0', x, y + Math.sin(t * 0.9 + i) * 8, 80 * s, 80 * s, 0, WHITE, 1);
+    /* the watchers: present, but the same tonal family as the sky so they sit
+       in the air instead of floating on top of it */
+    const c = tint('#e8f0f8').map((v, j) => v * lt()[j]);
+    pushS(0, false, shut ? 'eye1' : 'eye0', x, y + Math.sin(t * 0.9 + i) * 8, 80 * s, 80 * s, 0, c, 0.55);
   }, t);
 }
 function drawWordLayer(t) {
@@ -2930,7 +3365,7 @@ function drawHeartLayer(t) {
     const y = 90 + hash(i * 27) * (H * 0.5);
     const s = (4 + hash(i * 5) * 6) / 12;
     pushS(0, false, 'hc' + (Math.floor(hash(i * 41) * 5) % 5), x, y + Math.sin(t * 1.1 + i * 2) * 14,
-      44 * s, 40 * s, Math.sin(t + i) * 0.3, WHITE, 0.5);
+      44 * s, 40 * s, Math.sin(t + i) * 0.3, lt(), 0.45);
   }, t);
 }
 function drawFgLayer(t) {
@@ -2944,10 +3379,15 @@ function drawFgLayer(t) {
 }
 
 /* ---------------- ground ---------------- */
+/* the same soil, lit by the mode's sky */
+const GTINT = { classic: WHITE, degen: [0.78, 1.06, 0.82], chaos: [1.06, 0.90, 0.94], ohio: [1.02, 0.80, 1.16], zen: [1.02, 1.01, 1.04] };
 function drawGround(t) {
   const x0 = camX - 80, x1 = camX + W / SC + 80;
-  for (let X = Math.floor(x0 / 300) * 300; X < x1; X += 300) gwr('strata', X, 30, 300, 460, 0, WHITE, 1);
-  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 46, 0, WHITE, 1);
+  const gt = GTINT[mode] || WHITE;
+  /* 310 wide for a 300 step: the tiles overlap, which hides the sampled seam
+     at the atlas cell edge */
+  for (let X = Math.floor(x0 / 300) * 300; X < x1; X += 300) gwr('strata', X, 30, 310, 460, 0, gt, 1);
+  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 46, 0, gt, 1);
   // grass + flowers
   const gs = 26;
   for (let i = Math.floor(x0 / gs); i * gs < x1; i++) {
@@ -2961,8 +3401,8 @@ function drawGround(t) {
   for (let i = Math.floor(x0 / 150); i * 150 < x1; i++) {
     for (let k = 0; k < 5; k++) {
       const r1 = hash(i * 7 + k * 13), r2 = hash(i * 11 + k * 29), r3 = hash(i * 3 + k * 41);
-      if (r1 < 0.09) {
-        const px = i * 150 + r2 * 150, py = 70 + r3 * 180;
+      if (r1 < 0.07) {
+        const px = i * 150 + r2 * 150, py = 120 + r3 * 250;
         gw('bg' + (Math.floor(r2 * 3) % 3), px, py, 1, 0, WHITE, 0.9);
         gw('glow', px, py, 1.1, 0, tint(['#ff9dbd', '#8fe3d0', '#ffd166'][Math.floor(r2 * 3) % 3]), 0.2, true);
       }
@@ -3005,7 +3445,13 @@ function drawEnemy(e, t) {
   }
   if (QUAL.lab) {
     const lbl = labelSprite(e.m.label);
-    if (lbl) { const l = SPR[lbl]; pushW(2, false, lbl, e.x, e.y + bob - e.r - 26, l.w, l.h, 0, WHITE, 1); }
+    if (lbl) {
+      /* a label is a caption, not a name tag: it fades out away from the
+         player, so the feed is only annotated where it can be read */
+      const d = Math.abs(e.x - (camX + W / SC * 0.42));
+      const a = clamp(1.35 - d / (W / SC * 0.6), 0, 1);
+      if (a > 0.06) { const l = SPR[lbl]; pushW(2, false, lbl, e.x, e.y + bob - e.r - 24, l.w, l.h, 0, WHITE, a * 0.94); }
+    }
   }
 }
 
@@ -3120,9 +3566,10 @@ function drawBossQuad(t) {
   const BS = 1.55;                                   // the algorithm towers over the feed
   wq('glow', b.x, by, 6 * (1 + b.enter), 0, tint(kind ? '#6fb7ff' : '#ff5d73'), 0.4, true);
   pushK('boss' + kind, b.x, by, k * BS, 1 / k * BS, 0, hot ? '#ff8888' : null, hot ? 2.1 : 1);
-  const blink = Math.sin(t * 1.1) > 0.95 ? 0.14 : 1;
+  const blink = Math.sin(t * 1.1) > 0.95 ? 0.16 : 1;
   const look = Math.sin(t * 1.6) * 10;
-  pushK('boss_eye', b.x + look, by - 20 * BS, BS, BS * blink, 0, hot ? '#ff8888' : null, hot ? 2 : 1);
+  wq('glow', b.x, by - 6 * BS, 3.4, 0, tint(kind ? '#6fb7ff' : '#c9366f'), 0.4, true);
+  pushK('boss_eye', b.x + look, by - 5 * BS, BS * 1.18, BS * 1.18 * blink, 0, hot ? '#ff8888' : null, hot ? 2 : 1);
   for (let i = 0; i < (QUAL.lab ? 5 : 3); i++) {
     const a = t * 0.9 + (i / 5) * TAU;
     pushK('boss_badge' + i, b.x + Math.cos(a) * 104, by + Math.sin(a) * 70 - 6, BS * 0.95, BS * 0.95, a * 0.6, null, 1);
@@ -3167,9 +3614,9 @@ function drawOverlayFx(t) {
   if (state === 'play' && QUAL.line) {
     const spd = clamp(player.x * 0.00004, 0, 0.5);
     for (let i = 0; i < 12; i++) {
-      const y = hash(i * 3 + Math.floor(t * 30) + 1) * H;
+      const y = 40 + hash(i * 3 + Math.floor(t * 30) + 1) * (GROUND - 90);
       const x = W - ((hash(i * 7) * W + t * (900 + hash(i) * 900)) % (W + 200));
-      pushS(0, true, 'speed', x, y, 100 + hash(i * 5) * 90, 4, 0, WHITE, 0.18 + spd * 0.3);
+      pushS(0, true, 'speed', x, y, 100 + hash(i * 5) * 90, 3, 0, tint('#fff4e0'), 0.10 + spd * 0.22);
     }
   }
   if (mode === 'ohio') fillR(0, 0, W, H, tint('#ff2e88'), 0.13, true);
@@ -3181,7 +3628,10 @@ function drawOverlayFx(t) {
       fillR((Math.random() - 0.5) * 40, yy, W, hh, tint(pick(['#ff2e88', '#2ee8ff', '#ffe27a'])), 0.10 + Math.random() * 0.16, true);
     }
   }
-  if (QUAL.vig) s8('vig', 0, 0, W, H, 0, WHITE, 1);
+  if (QUAL.vig) {
+    s8('vigb', 0, H - 190, W, 190, 0, WHITE, 0.9);
+    s8('vig', 0, 0, W, H, 0, WHITE, 1);
+  }
   if (hurtFx > 0) s8('vig', 0, 0, W, H, 0, tint('#ff5050'), hurtFx * 0.9, true);
   if (scanT > 0) {
     for (let i = 0; i < 40; i++) {
@@ -4039,8 +4489,18 @@ function hud() {
   if (pnl !== hudScore) {
     $('score').textContent = money(pnl);
     const chip = $('plChip');
-    chip.classList.toggle('up', pnl >= hudScore);
-    chip.classList.toggle('down', pnl < hudScore);
+    const up = pnl >= hudScore;
+    chip.classList.toggle('up', up);
+    chip.classList.toggle('down', !up);
+    /* the arrow says which way the number just moved, and ticks once */
+    const d = $('plDelta');
+    if (d) {
+      d.textContent = up ? '▲' : '▼';
+      d.className = 'delta ' + (up ? 'up' : 'dn');
+      d.classList.remove('flash');
+      void d.offsetWidth;
+      d.classList.add('flash');
+    }
     hudScore = pnl;
   }
   const d = Math.floor(dist);
@@ -4428,7 +4888,8 @@ window.MEMERUN.dev = {
   spritesOn: pg => Object.keys(SPR).filter(k => SPR[k].page === pg),
   kitNames: () => Object.keys(KITS),
   kitDrop: () => Object.keys(KITS).filter(k => KITS[k].drop).map(k => k + ':' + KITS[k].drop),
-  _g: { THREE, PRIM, TILT, partGeo, buildKitGeo, mergeGeos, B, S, E, CP, CY, CN, RG, OC, HX, PR, P, col, bandOf, TILT, LIGHT },
+  _g: { THREE, primGeo, pillowGeo, ballGeo, capsuleGeo, TILT, partGeo, buildKitGeo, mergeGeos,
+    B, BX, PL, S, BA, E, CP, CY, CN, RG, OC, HX, PR, GM, P, col, bandOf, LIGHT, RIM, KITS },
   distance: m => { player.x = m * 60; camX = player.x - W * 0.30 / SC; nextX = player.x + 400; }
 };
 

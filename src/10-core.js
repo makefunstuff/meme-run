@@ -227,10 +227,13 @@ class Quads {
 
 /* ---------------- renderer / camera ---------------- */
 const cv = document.getElementById('game');
+/* antialias is not optional here: the cast is geometry, and a hard pixel edge
+   on every primitive silhouette is the difference between toys and clipping. */
 const renderer = new THREE.WebGLRenderer({ canvas: cv,
-  alpha: false, antialias: false, powerPreference: 'high-performance', stencil: false, depth: false
+  alpha: false, antialias: true, powerPreference: 'high-performance', stencil: false, depth: false
 });
 renderer.autoClear = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 let W = 0, H = 0, DPR = 1, SC = 1, GROUND = 0;
 const camera = new THREE.OrthographicCamera(0, 1, 0, -1, -2000, 2000);

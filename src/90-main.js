@@ -175,6 +175,7 @@ window.MEMERUN.dev = {
   spritesOn: pg => Object.keys(SPR).filter(k => SPR[k].page === pg),
   kitNames: () => Object.keys(KITS),
   kitDrop: () => Object.keys(KITS).filter(k => KITS[k].drop).map(k => k + ':' + KITS[k].drop),
-  _g: { THREE, PRIM, TILT, partGeo, buildKitGeo, mergeGeos, B, S, E, CP, CY, CN, RG, OC, HX, PR, P, col, bandOf, TILT, LIGHT },
+  _g: { THREE, primGeo, pillowGeo, ballGeo, capsuleGeo, TILT, partGeo, buildKitGeo, mergeGeos,
+    B, BX, PL, S, BA, E, CP, CY, CN, RG, OC, HX, PR, GM, P, col, bandOf, LIGHT, RIM, KITS },
   distance: m => { player.x = m * 60; camX = player.x - W * 0.30 / SC; nextX = player.x + 400; }
 };

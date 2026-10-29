@@ -20,8 +20,18 @@ function hud() {
   if (pnl !== hudScore) {
     $('score').textContent = money(pnl);
     const chip = $('plChip');
-    chip.classList.toggle('up', pnl >= hudScore);
-    chip.classList.toggle('down', pnl < hudScore);
+    const up = pnl >= hudScore;
+    chip.classList.toggle('up', up);
+    chip.classList.toggle('down', !up);
+    /* the arrow says which way the number just moved, and ticks once */
+    const d = $('plDelta');
+    if (d) {
+      d.textContent = up ? '▲' : '▼';
+      d.className = 'delta ' + (up ? 'up' : 'dn');
+      d.classList.remove('flash');
+      void d.offsetWidth;
+      d.classList.add('flash');
+    }
     hudScore = pnl;
   }
   const d = Math.floor(dist);

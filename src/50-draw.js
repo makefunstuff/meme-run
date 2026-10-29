@@ -81,52 +81,66 @@ function repeat(n, spacing, factor, drawOne, t) {
 }
 
 /* ---------------- sky + background ---------------- */
+/* the world is baked once in one palette, so each mode re-lights it by tint:
+   one colour family from the sky down to the soil */
+const LTINT = { classic: WHITE, degen: [0.72, 1.06, 0.74], chaos: [1.10, 0.92, 0.84], ohio: [1.04, 0.80, 1.16], zen: [1.02, 1.00, 1.04] };
+const STINT = { classic: WHITE, degen: [0.80, 1.10, 0.66], chaos: [1.12, 0.98, 0.86], ohio: [1.12, 0.84, 1.06], zen: WHITE };
+const lt = () => LTINT[mode] || WHITE;
+const st = () => STINT[mode] || WHITE;
 function drawSky(t) {
   const sky = SPR['sky' + ((MODES[mode] || MODES.classic).sky)];
   if (sky) s8('sky' + ((MODES[mode] || MODES.classic).sky), 0, 0, W, H, 0, WHITE, 1);
   const sx0 = W * 0.86, sy0 = H * 0.15;
+  const lc = st();
   const ss = clamp(H / 700, 0.5, 1.3);
   for (let i = 0; i < (QUAL.sh ? 4 : 0); i++) {
     const a = -0.55 + i * 0.42 + Math.sin(t * 0.25 + i) * 0.05;
-    pushS(0, true, 'shaft', sx0, sy0, 156 * ss, 764 * ss, a, [1, 1, 0.85], 0.06);
+    pushS(0, true, 'shaft', sx0, sy0, 156 * ss, 764 * ss, a, lc, 0.06);
   }
   if (QUAL.band) {
-    for (let i = 0; i < 3; i++) {
-      const yy = H * (0.30 + i * 0.10) + Math.sin(t * 0.4 + i) * 10 - 20;
-      const ox = -((camX * 0.02) % 412) - 6;
-      s8('band' + i, ox, yy, 412 * (W / 1200 + 0.6), 58, 0, WHITE, 0.10);
-      s8('band' + i, ox + 412 * (W / 1200 + 0.6), yy, 412 * (W / 1200 + 0.6), 58, 0, WHITE, 0.10);
+    for (let i = 0; i < 4; i++) {
+      const yy = H * (0.20 + i * 0.11) + Math.sin(t * 0.35 + i) * 12 - 20;
+      const w = 412 * (W / 1200 + 0.6);
+      const ox = -((camX * (0.014 + i * 0.006)) % w) - 6;
+      s8('band' + (i % 3), ox, yy, w, 52, 0, WHITE, 0.055);
+      s8('band' + (i % 3), ox + w, yy, w, 52, 0, WHITE, 0.055);
     }
   }
   const rs = clamp(H / 900, 0.55, 1.15);
-  pushS(0, true, 'glow', sx0, sy0, 320 * rs, 320 * rs, 0, tint('#fff0a8'), 0.5);
-  pushS(0, false, 'rays', sx0, sy0, 148 * rs, 148 * rs, t * 0.12, WHITE, 0.9);
-  pushS(0, false, 'sun', sx0, sy0, 96 * rs, 96 * rs, 0, WHITE, 1);
+  pushS(0, true, 'glow', sx0, sy0, 320 * rs, 320 * rs, 0, tint('#fff0a8'), 0.42);
+  pushS(0, false, 'rays', sx0, sy0, 148 * rs, 148 * rs, t * 0.12, lc, 0.85);
+  pushS(0, false, 'sun', sx0, sy0, 96 * rs, 96 * rs, 0, lc, 1);
+  /* the horizon haze, in the colour of the sky's lowest stop, so the ground
+     joins the sky instead of being pasted under it */
+  const sk = SKIES[(MODES[mode] || MODES.classic).sky] || SKIES[0];
+  s8('haze', 0, GROUND - 116, W, 116, 0, tint(sk[sk.length - 1][0]), 0.55);
 }
 function drawFarLayer(t) {
   const n = layerCount(300);
   repeat(n, 300, 0.055, (x, i) => {
     const v = Math.floor(hash(i * 3 + 1) * 4);
-    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, WHITE, 0.5);
+    const c = lt();
+    pushW(0, false, 'md' + v, camX + x / SC, 20 / SC, 544, 272, 0, c, 0.5);
     const mon = Math.floor(hash(i * 11 + 2) * 13);
     if (mon < 3) {
       const kinds = ['toilet', 'crew', 'crown', 'arch', 'eye'];
       const kind = kinds[Math.floor(hash(i * 13 + 4) * 5)];
       const r1 = hash(i * 3 + 1), r2 = hash(i * 7 + 5);
       pushW(0, false, 'mon_' + kind, camX + (x + 40 + r1 * 90) / SC, (-30 - r2 * 40) / SC,
-        SPR['mon_' + kind].w, SPR['mon_' + kind].h, 0, WHITE, 0.42);
+        SPR['mon_' + kind].w, SPR['mon_' + kind].h, 0, c, 0.42);
     }
   }, t);
 }
 function drawMidLayer(t) {
   const n = layerCount(240);
   repeat(n, 240, 0.16, (x, i) => {
-    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, WHITE, 0.72);
+    const c = lt();
+    pushW(0, false, 'hl' + (i & 1), camX + x / SC, 20 / SC, 464, 272, 0, c, 0.72);
     if (hash(i * 19 + 3) > 0.55) {
       const r1 = hash(i * 5 + 11);
       const bx = x + 30 + r1 * 80, by = -90 - hash(i * 23) * 60;
       pushW(0, false, 'bill' + (Math.floor(hash(i * 31) * 6) % 6), camX + bx / SC, by / SC,
-        92, 96, (hash(i * 29) - 0.5) * 0.16, WHITE, 1);
+        92, 96, (hash(i * 29) - 0.5) * 0.16, c, 1);
     }
   }, t);
 }
@@ -135,17 +149,20 @@ function drawCloudLayer(t) {
   repeat(n, 280, 0.3, (x, i) => {
     const y = 50 + hash(i * 3) * (H * 0.36);
     const s = 0.6 + hash(i * 7) * 0.8;
-    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 6, 104 * s, 72 * s, 0, WHITE, 0.95);
+    pushS(0, false, 'cloud', x, y + Math.sin(t * 0.4 + i) * 6, 104 * s, 72 * s, 0, lt(), 0.92);
   }, t);
 }
 function drawEyeLayer(t) {
   const n = layerCount(430);
   repeat(n, 430, 0.42, (x, i) => {
     const y = 70 + hash(i * 13) * (H * 0.34);
-    const r = 15 + hash(i * 17) * 16;
+    const r = 11 + hash(i * 17) * 12;
     const shut = Math.sin(t * 1.5 + i * 2) > 0.94;
     const s = r / 26;
-    pushS(0, false, shut ? 'eye1' : 'eye0', x, y + Math.sin(t * 0.9 + i) * 8, 80 * s, 80 * s, 0, WHITE, 1);
+    /* the watchers: present, but the same tonal family as the sky so they sit
+       in the air instead of floating on top of it */
+    const c = tint('#e8f0f8').map((v, j) => v * lt()[j]);
+    pushS(0, false, shut ? 'eye1' : 'eye0', x, y + Math.sin(t * 0.9 + i) * 8, 80 * s, 80 * s, 0, c, 0.55);
   }, t);
 }
 function drawWordLayer(t) {
@@ -164,7 +181,7 @@ function drawHeartLayer(t) {
     const y = 90 + hash(i * 27) * (H * 0.5);
     const s = (4 + hash(i * 5) * 6) / 12;
     pushS(0, false, 'hc' + (Math.floor(hash(i * 41) * 5) % 5), x, y + Math.sin(t * 1.1 + i * 2) * 14,
-      44 * s, 40 * s, Math.sin(t + i) * 0.3, WHITE, 0.5);
+      44 * s, 40 * s, Math.sin(t + i) * 0.3, lt(), 0.45);
   }, t);
 }
 function drawFgLayer(t) {
@@ -178,10 +195,15 @@ function drawFgLayer(t) {
 }
 
 /* ---------------- ground ---------------- */
+/* the same soil, lit by the mode's sky */
+const GTINT = { classic: WHITE, degen: [0.78, 1.06, 0.82], chaos: [1.06, 0.90, 0.94], ohio: [1.02, 0.80, 1.16], zen: [1.02, 1.01, 1.04] };
 function drawGround(t) {
   const x0 = camX - 80, x1 = camX + W / SC + 80;
-  for (let X = Math.floor(x0 / 300) * 300; X < x1; X += 300) gwr('strata', X, 30, 300, 460, 0, WHITE, 1);
-  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 46, 0, WHITE, 1);
+  const gt = GTINT[mode] || WHITE;
+  /* 310 wide for a 300 step: the tiles overlap, which hides the sampled seam
+     at the atlas cell edge */
+  for (let X = Math.floor(x0 / 300) * 300; X < x1; X += 300) gwr('strata', X, 30, 310, 460, 0, gt, 1);
+  for (let i = Math.floor(x0 / 88); i * 88 < x1; i++) gwr('road', i * 88, 0, 92, 46, 0, gt, 1);
   // grass + flowers
   const gs = 26;
   for (let i = Math.floor(x0 / gs); i * gs < x1; i++) {
@@ -195,8 +217,8 @@ function drawGround(t) {
   for (let i = Math.floor(x0 / 150); i * 150 < x1; i++) {
     for (let k = 0; k < 5; k++) {
       const r1 = hash(i * 7 + k * 13), r2 = hash(i * 11 + k * 29), r3 = hash(i * 3 + k * 41);
-      if (r1 < 0.09) {
-        const px = i * 150 + r2 * 150, py = 70 + r3 * 180;
+      if (r1 < 0.07) {
+        const px = i * 150 + r2 * 150, py = 120 + r3 * 250;
         gw('bg' + (Math.floor(r2 * 3) % 3), px, py, 1, 0, WHITE, 0.9);
         gw('glow', px, py, 1.1, 0, tint(['#ff9dbd', '#8fe3d0', '#ffd166'][Math.floor(r2 * 3) % 3]), 0.2, true);
       }
@@ -239,7 +261,13 @@ function drawEnemy(e, t) {
   }
   if (QUAL.lab) {
     const lbl = labelSprite(e.m.label);
-    if (lbl) { const l = SPR[lbl]; pushW(2, false, lbl, e.x, e.y + bob - e.r - 26, l.w, l.h, 0, WHITE, 1); }
+    if (lbl) {
+      /* a label is a caption, not a name tag: it fades out away from the
+         player, so the feed is only annotated where it can be read */
+      const d = Math.abs(e.x - (camX + W / SC * 0.42));
+      const a = clamp(1.35 - d / (W / SC * 0.6), 0, 1);
+      if (a > 0.06) { const l = SPR[lbl]; pushW(2, false, lbl, e.x, e.y + bob - e.r - 24, l.w, l.h, 0, WHITE, a * 0.94); }
+    }
   }
 }
 
@@ -354,9 +382,10 @@ function drawBossQuad(t) {
   const BS = 1.55;                                   // the algorithm towers over the feed
   wq('glow', b.x, by, 6 * (1 + b.enter), 0, tint(kind ? '#6fb7ff' : '#ff5d73'), 0.4, true);
   pushK('boss' + kind, b.x, by, k * BS, 1 / k * BS, 0, hot ? '#ff8888' : null, hot ? 2.1 : 1);
-  const blink = Math.sin(t * 1.1) > 0.95 ? 0.14 : 1;
+  const blink = Math.sin(t * 1.1) > 0.95 ? 0.16 : 1;
   const look = Math.sin(t * 1.6) * 10;
-  pushK('boss_eye', b.x + look, by - 20 * BS, BS, BS * blink, 0, hot ? '#ff8888' : null, hot ? 2 : 1);
+  wq('glow', b.x, by - 6 * BS, 3.4, 0, tint(kind ? '#6fb7ff' : '#c9366f'), 0.4, true);
+  pushK('boss_eye', b.x + look, by - 5 * BS, BS * 1.18, BS * 1.18 * blink, 0, hot ? '#ff8888' : null, hot ? 2 : 1);
   for (let i = 0; i < (QUAL.lab ? 5 : 3); i++) {
     const a = t * 0.9 + (i / 5) * TAU;
     pushK('boss_badge' + i, b.x + Math.cos(a) * 104, by + Math.sin(a) * 70 - 6, BS * 0.95, BS * 0.95, a * 0.6, null, 1);
@@ -401,9 +430,9 @@ function drawOverlayFx(t) {
   if (state === 'play' && QUAL.line) {
     const spd = clamp(player.x * 0.00004, 0, 0.5);
     for (let i = 0; i < 12; i++) {
-      const y = hash(i * 3 + Math.floor(t * 30) + 1) * H;
+      const y = 40 + hash(i * 3 + Math.floor(t * 30) + 1) * (GROUND - 90);
       const x = W - ((hash(i * 7) * W + t * (900 + hash(i) * 900)) % (W + 200));
-      pushS(0, true, 'speed', x, y, 100 + hash(i * 5) * 90, 4, 0, WHITE, 0.18 + spd * 0.3);
+      pushS(0, true, 'speed', x, y, 100 + hash(i * 5) * 90, 3, 0, tint('#fff4e0'), 0.10 + spd * 0.22);
     }
   }
   if (mode === 'ohio') fillR(0, 0, W, H, tint('#ff2e88'), 0.13, true);
@@ -415,7 +444,10 @@ function drawOverlayFx(t) {
       fillR((Math.random() - 0.5) * 40, yy, W, hh, tint(pick(['#ff2e88', '#2ee8ff', '#ffe27a'])), 0.10 + Math.random() * 0.16, true);
     }
   }
-  if (QUAL.vig) s8('vig', 0, 0, W, H, 0, WHITE, 1);
+  if (QUAL.vig) {
+    s8('vigb', 0, H - 190, W, 190, 0, WHITE, 0.9);
+    s8('vig', 0, 0, W, H, 0, WHITE, 1);
+  }
   if (hurtFx > 0) s8('vig', 0, 0, W, H, 0, tint('#ff5050'), hurtFx * 0.9, true);
   if (scanT > 0) {
     for (let i = 0; i < 40; i++) {

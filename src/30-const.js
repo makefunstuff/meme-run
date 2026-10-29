@@ -13,12 +13,14 @@ const MODES = {
   ohio:    { name: 'OHIO',    speed: 1.08, density: 1.25, dmg: 1, eventEvery: 6,  bossEvery: BOSS_EVERY * 0.85, sky: 2, grav: 1.2, coin: 0.9 },
   zen:     { name: 'ZEN',     speed: 0.82, density: 0.70, dmg: 0, eventEvery: 26, bossEvery: BOSS_EVERY * 1.6, sky: 3, coin: 1.2 }
 };
+/* Each sky runs dark at the top of the screen to a lit horizon, with the last
+   stop doubling as the horizon haze colour the ground is seated in. */
 const SKIES = [
-  [['#4aa8e8', 0], ['#8fd0ff', .22], ['#cdeaff', .46], ['#ffe0ee', .66], ['#ffc0da', .84], ['#ffb0cf', 1]],
-  [['#7b2d6b', 0], ['#c9366f', .24], ['#ff6f61', .5], ['#ffb36b', .72], ['#ffd166', .88], ['#ffe9a8', 1]],
-  [['#1b0f3a', 0], ['#3a1d63', .24], ['#6b2f9c', .46], ['#c9366f', .68], ['#ff5d73', .86], ['#ff9dbd', 1]],
-  [['#9fd6e8', 0], ['#cfe9f5', .24], ['#e8f3f0', .48], ['#ffeef5', .7], ['#ffe0ee', .88], ['#fff5fa', 1]],
-  [['#05130c', 0], ['#0b2a17', .22], ['#114527', .44], ['#16a34a', .68], ['#7ff0a8', .86], ['#d8ffe6', 1]]
+  [['#2f86d8', 0], ['#5fadf0', .26], ['#9fd2f8', .48], ['#d6ecfd', .66], ['#ffdfec', .84], ['#ffc6dc', 1]],
+  [['#4a1f5e', 0], ['#8b2c6e', .24], ['#d14a63', .46], ['#ff7f5f', .64], ['#ffbe68', .82], ['#ffe6ac', 1]],
+  [['#120a2c', 0], ['#28134c', .24], ['#54217e', .44], ['#962f84', .62], ['#d43a72', .8], ['#ff7fa2', 1]],
+  [['#8fcbe0', 0], ['#bfe3f0', .26], ['#dff0f2', .48], ['#f6f2f8', .68], ['#ffe8f2', .86], ['#fff3fa', 1]],
+  [['#04120b', 0], ['#0a2415', .26], ['#123c22', .48], ['#1c7a3c', .7], ['#4fd07a', .86], ['#a8f0c0', 1]]
 ];
 
 const WEAPONS = {

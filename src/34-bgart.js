@@ -2,16 +2,26 @@
    2c. world art bake sources (parallax layers, ground, sky pieces)
    Local origin: ground line = y 0, layer items sit above it.
    ============================================================ */
+/* every land layer is drawn twice: once shifted up in a pale tone, then the
+   body on top, which leaves a rim of light along the ridge. Cheap aerial
+   perspective, and it stops the far layers reading as flat cut-outs. */
+function ridgePath(spread, h0, h1, r1, r2) {
+  ctx.beginPath();
+  ctx.moveTo(-spread, 20);
+  ctx.quadraticCurveTo(-spread * 0.42, -h0, spread * 0.2, -h1);
+  ctx.quadraticCurveTo(spread * 0.62, 10, spread * 1.36, 20);
+  ctx.closePath();
+}
 function bakeMound(v) {
   const r1 = hash(v * 3 + 1), r2 = hash(v * 7 + 5);
   ctx.globalAlpha = 1;
-  ctx.fillStyle = '#e8b4d0';
-  ctx.beginPath();
-  ctx.moveTo(-220, 20);
-  ctx.quadraticCurveTo(-90, -130 - r1 * 90, 60, -40 - r2 * 60);
-  ctx.quadraticCurveTo(170, 10, 300, 20);
-  ctx.closePath();
-  ctx.fill();
+  ridgePath(220, 130 + r1 * 90, 40 + r2 * 60, r1, r2);
+  ctx.save(); ctx.translate(0, -7);
+  ctx.fillStyle = '#fbd8ea'; ctx.fill(); ctx.restore();
+  const q = ctx.createLinearGradient(0, -200, 0, 20);
+  q.addColorStop(0, '#e9b6d6'); q.addColorStop(0.6, '#d79cc4'); q.addColorStop(1, '#bd82b4');
+  ridgePath(220, 130 + r1 * 90, 40 + r2 * 60, r1, r2);
+  ctx.fillStyle = q; ctx.fill();
 }
 function bakeMonument(kind) {
   ctx.fillStyle = '#c98cb8'; ctx.strokeStyle = '#c98cb8';
@@ -40,15 +50,22 @@ function bakeMonument(kind) {
 }
 function bakeHill(v) {
   const r1 = hash(v * 5 + 11);
-  const q = ctx.createLinearGradient(0, -190, 0, 20);
-  q.addColorStop(0, '#b6ead0'); q.addColorStop(1, '#7fd3a8');
-  ctx.fillStyle = q;
-  ctx.beginPath();
-  ctx.moveTo(-190, 20);
-  ctx.quadraticCurveTo(-40, -120 - r1 * 110, 90, -30 - r1 * 40);
-  ctx.quadraticCurveTo(160, 12, 250, 20);
-  ctx.closePath();
-  ctx.fill();
+  const h0 = 120 + r1 * 110, h1 = 30 + r1 * 40;
+  ridgePath(190, h0, h1, r1, r1);
+  ctx.save(); ctx.translate(0, -6);
+  ctx.fillStyle = '#d6f5e2'; ctx.fill(); ctx.restore();
+  const q = ctx.createLinearGradient(0, -h0, 0, 20);
+  q.addColorStop(0, '#93ddba'); q.addColorStop(0.45, '#74cba2'); q.addColorStop(1, '#4e9f86');
+  ridgePath(190, h0, h1, r1, r1);
+  ctx.fillStyle = q; ctx.fill();
+  /* a few bush silhouettes on the ridge so the mid layer has texture */
+  ctx.save(); ridgePath(190, h0, h1, r1, r1); ctx.clip();
+  ctx.fillStyle = rgba('#3f8a70', 0.5);
+  for (let i = 0; i < 7; i++) {
+    const x = -170 + hash(i * 7 + v * 13) * 380, y = -20 - hash(i * 3 + v) * (h0 * 0.7);
+    ell(x, y, 12 + hash(i) * 16, 5 + hash(i * 5) * 6); ctx.fill();
+  }
+  ctx.restore();
 }
 function bakeBill(word) {
   rrPath(-34, -30, 68, 40, 8); sticker('#fff3e2', { pad: 4 });
@@ -56,13 +73,21 @@ function bakeBill(word) {
   txt(word, 0, -10, { size: 12, color: '#e8618c', stroke: false });
 }
 function bakeCloud() {
-  ctx.beginPath();
-  ctx.ellipse(-30, 8, 28, 19, 0, 0, TAU);
-  ctx.ellipse(2, -6, 34, 25, 0, 0, TAU);
-  ctx.ellipse(34, 6, 28, 18, 0, 0, TAU);
-  ctx.ellipse(6, 12, 32, 16, 0, 0, TAU);
-  ctx.fillStyle = '#fff'; ctx.fill();
-  ell(0, 18, 30, 6); ctx.fillStyle = 'rgba(190,160,180,0.35)'; ctx.fill();
+  const lumps = () => {
+    ctx.beginPath();
+    ctx.ellipse(-30, 8, 28, 19, 0, 0, TAU);
+    ctx.ellipse(2, -6, 34, 25, 0, 0, TAU);
+    ctx.ellipse(34, 6, 28, 18, 0, 0, TAU);
+    ctx.ellipse(6, 12, 32, 16, 0, 0, TAU);
+    ctx.closePath();
+  };
+  lumps(); fillc('rgba(150,120,160,0.30)');      // the drop, so it sits in the air
+  ctx.save(); ctx.translate(0, -2.5);
+  lumps(); ctx.fillStyle = '#fffdf8'; ctx.fill();  // the sunlit top
+  ctx.restore();
+  ctx.save(); lumps(); ctx.clip();
+  ell(0, 20, 34, 9); ctx.fillStyle = 'rgba(178,150,190,0.45)'; ctx.fill();
+  ctx.restore();
   circ(-8, 0, 3.4); fillc('#7a5a6c');
   circ(10, 0, 3.4); fillc('#7a5a6c');
   ctx.beginPath(); ctx.arc(1, 7, 8, 0.2, Math.PI - 0.2); line(2.4, '#7a5a6c');
@@ -90,14 +115,11 @@ function bakeEye(shut) {
   circ(0, 0, r * 0.26); fillc('#241428');
   circ(-r * 0.17, -r * 0.19, r * 0.15); fillc('#fff');
   ctx.restore();
-  ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.lineCap = 'round';
-  for (let v = -1; v <= 1; v++) {
-    const a = -Math.PI / 2 + v * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * r * 0.96, Math.sin(a) * r * 0.96 * k);
-    ctx.lineTo(Math.cos(a) * (r * 1.26), Math.sin(a) * (r * 1.26) * k);
-    ctx.stroke();
-  }
+  /* the lid: a lid, not a sea urchin */
+  ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r * 1.02, -r * 0.16 * k); ctx.quadraticCurveTo(0, -r * 1.24 * k, r * 1.02, -r * 0.16 * k);
+  ctx.stroke();
 }
 function bakeWordSprite(w) {
   txt(w, 0, 0, { size: 26, color: '#fff', stroke: '#c9739a', lw: 6 });
@@ -137,53 +159,79 @@ function bakeShaft() {
   ctx.fill();
 }
 function bakeBand(col) {
-  ctx.fillStyle = col;
+  /* a high streak of atmosphere: faded at both ends so it never reads as a bar */
+  const q = ctx.createLinearGradient(0, 0, 400, 0);
+  q.addColorStop(0, rgba(col, 0)); q.addColorStop(0.28, rgba(col, 0.85));
+  q.addColorStop(0.72, rgba(col, 0.85)); q.addColorStop(1, rgba(col, 0));
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  for (let x = 0; x <= 400; x += 20) ctx.lineTo(x, Math.sin(x * 0.016) * 20);
-  ctx.lineTo(400, 46); ctx.lineTo(0, 46);
-  ctx.closePath(); ctx.fill();
+  ctx.moveTo(0, 26);
+  for (let x = 0; x <= 400; x += 16) ctx.lineTo(x, 22 + Math.sin(x * 0.016) * 16);
+  for (let x = 400; x >= 0; x -= 16) ctx.lineTo(x, 30 + Math.sin(x * 0.016) * 16);
+  ctx.closePath();
+  ctx.fillStyle = q; ctx.fill();
 }
+/* The stage floor: a sunlit grass edge, a saturated grass body, then laid soil.
+   Tiles every 88 world px, so everything in it is periodic at 88. */
 function bakeRoadTile() {
-  for (let i = 0; i < 2; i++) {
-    const X = i * 44;
-    const q = ctx.createLinearGradient(0, 0, 0, 26);
-    q.addColorStop(0, (i & 1) ? '#b7f0d1' : '#ffe0cd');
-    q.addColorStop(1, (i & 1) ? '#8adcb0' : '#f7bfa4');
-    ctx.fillStyle = q;
-    ctx.fillRect(X, 0, 44, 26);
-    ctx.fillStyle = rgba('#3a2340', 0.13);
-    ctx.fillRect(X, 0, 2.5, 26);
-    ctx.fillStyle = rgba('#fff', 0.35);
-    ctx.fillRect(X + 5, 6, 32, 2);
-    if ((i % 2) === 0) { ctx.fillStyle = rgba('#fff', 0.45); ctx.fillRect(X + 6, 12, 22, 2.5); }
+  const g = ctx.createLinearGradient(0, 0, 0, 22);
+  g.addColorStop(0, '#c6ee8e'); g.addColorStop(0.30, '#8ed96e'); g.addColorStop(1, '#3f9a55');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 88, 22);
+  ctx.fillStyle = '#f6ffe2'; ctx.fillRect(0, 0, 88, 2.6);           // the sunlit lip
+  ctx.fillStyle = rgba('#2c6f3f', 0.30); ctx.fillRect(0, 20.5, 88, 2.5);
+  for (let i = 0; i < 11; i++) {                                     // blade notches
+    const x = i * 8 + hash(i * 5) * 5;
+    poly([[x, 0], [x + 2.4, 0], [x + 1.2, -3 - hash(i) * 3]]);
+    fillc('#d8f7a8');
   }
-  ctx.fillStyle = rgba('#fff', 0.85); ctx.fillRect(0, 0, 88, 3);
-  ctx.fillStyle = '#5d9d7c'; ctx.fillRect(0, 26, 88, 8);
-  ctx.fillStyle = rgba('#20131f', 0.45); ctx.fillRect(0, 34, 88, 7);
+  const s = ctx.createLinearGradient(0, 20, 0, 46);                  // the soil
+  s.addColorStop(0, '#7a5136'); s.addColorStop(0.55, '#5b3a2e'); s.addColorStop(1, '#402a28');
+  ctx.fillStyle = s; ctx.fillRect(0, 22, 88, 24);
+  ctx.fillStyle = rgba('#2a1a20', 0.55);                             // the seam under the turf
+  ctx.fillRect(0, 22, 88, 2.2);
+  for (let r = 0; r < 2; r++) {                                      // brick courses
+    const y = 26 + r * 9;
+    ctx.fillStyle = rgba('#a8763f', 0.22 - r * 0.06);
+    for (let i = 0; i < 3; i++) ctx.fillRect(i * 29 + (r ? 14 : 0), y, 27, 7);
+    ctx.fillStyle = rgba('#241618', 0.35);
+    for (let i = 0; i < 3; i++) ctx.fillRect(i * 29 + (r ? 14 : 0) - 1.5, y, 1.5, 7);
+  }
 }
+/* The earth under the stage: warm soil, laid strata (periodic at 300 so the
+   tiles join), pebbles and buried bling. */
 function bakeStrata() {
   const q = ctx.createLinearGradient(0, 0, 0, 460);
-  q.addColorStop(0, '#7e5f9c'); q.addColorStop(0.18, '#5d4378');
-  q.addColorStop(0.6, '#3b2a4e'); q.addColorStop(1, '#1e1428');
+  q.addColorStop(0, '#7d5539'); q.addColorStop(0.16, '#63402f');
+  q.addColorStop(0.52, '#4a3038'); q.addColorStop(1, '#2a1b28');
   ctx.fillStyle = q; ctx.fillRect(0, 0, 300, 460);
-  ctx.globalAlpha = 0.22;
-  [46, 102, 170].forEach((yy, i) => {
-    ctx.strokeStyle = ['#a98cc4', '#8a6ba6', '#6b4f88'][i];
-    ctx.lineWidth = 2 + i;
-    ctx.beginPath();
-    for (let x = 0; x <= 300; x += 20) {
-      const y = yy + Math.sin(x * 0.021 + i) * 6;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  });
+  ctx.fillStyle = rgba('#a8763f', 0.22); ctx.fillRect(0, 0, 300, 30);
+  ctx.globalAlpha = 0.42;
+  /* the strata run past the tile box into the bake pad, so the box edge is a
+     mid-stroke pixel and the tiles join without a seam */
+  [[52, '#c9905f', 3], [124, '#a8715a', 2], [198, '#8a5f6e', 5], [288, '#75506f', 3], [372, '#5f4066', 5], [430, '#4d3560', 2]]
+    .forEach(([yy, cc, lw], i) => {
+      ctx.strokeStyle = cc; ctx.lineWidth = lw;
+      ctx.beginPath();
+      for (let x = -8; x <= 308; x += 10) {
+        const y = yy + Math.sin(x * (TAU * (i + 1) / 2) / 300 + i * 1.7) * 7;
+        x === -8 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+  ctx.globalAlpha = 0.5;
+  for (let i = 0; i < 5; i++) {                    // buried pipes, the stage's plumbing
+    const x = 24 + hash(i * 17 + 5) * 250, y = 96 + hash(i * 7 + 3) * 300;
+    ctx.strokeStyle = rgba('#2c1d2a', 0.55); ctx.lineWidth = 9; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 46 + hash(i) * 40, y + 10); ctx.stroke();
+    ctx.strokeStyle = rgba('#8a6a7c', 0.35); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(x, y - 2); ctx.lineTo(x + 40 + hash(i) * 36, y + 8); ctx.stroke();
+  }
   ctx.globalAlpha = 1;
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 30; i++) {                                    // stones
     const r1 = hash(i * 7 + 3), r2 = hash(i * 11 + 9), r3 = hash(i * 3 + 5);
-    if (r1 > 0.62) {
-      ctx.fillStyle = rgba('#a98cc4', 0.32 - r3 * 0.18);
-      ell(r2 * 290 + 5, 52 + r3 * 210, 4 + r1 * 8, (4 + r1 * 8) * 0.72);
+    if (r1 > 0.42) {
+      const rx = 3 + r1 * 8;
+      ell(14 + r2 * 272, 56 + r3 * 390, rx, rx * 0.72);
+      ctx.fillStyle = rgba(r3 > 0.62 ? '#c8a07c' : '#3a2434', 0.34 - r3 * 0.12);
       ctx.fill();
     }
   }
@@ -199,22 +247,19 @@ function bakeFlower(col) {
   circ(0, 0, 1.8); fillc('#fff7d6');
 }
 function bakeBling(i) {
-  const col = ['#ff9dbd', '#8fe3d0', '#ffd166'][i % 3];
-  poly([[0, -9], [5, 0], [0, 9], [-5, 0]]);
+  const col = ['#ffd166', '#8fe3d0', '#ff9dbd'][i % 3];
+  poly([[0, -8], [4.4, 0], [0, 8], [-4.4, 0]]);
   ctx.fillStyle = col; ctx.fill();
-  ctx.strokeStyle = rgba('#fff', 0.6); ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = rgba('#fffdf0', 0.75); ctx.lineWidth = 1.2; ctx.stroke();
 }
 function bakeCeilingStrip() {
   const q = ctx.createLinearGradient(0, -120, 0, 0);
-  q.addColorStop(0, '#3b2a4e'); q.addColorStop(1, '#7e5f9c');
+  q.addColorStop(0, '#1d1324'); q.addColorStop(1, '#573630');
   ctx.fillStyle = q; ctx.fillRect(0, -120, 88, 120);
-  for (let i = 0; i < 2; i++) {
-    ctx.fillStyle = (i & 1) ? '#b7f0d1' : '#ffe0cd';
-    ctx.fillRect(i * 44, -24, 44, 24);
-    ctx.fillStyle = rgba('#3a2340', 0.13);
-    ctx.fillRect(i * 44, -24, 2.5, 24);
-  }
-  ctx.fillStyle = rgba('#fff', 0.85); ctx.fillRect(0, -3, 88, 3);
+  ctx.fillStyle = '#5b3a2e'; ctx.fillRect(0, -26, 88, 24);
+  ctx.fillStyle = '#3f9a55'; ctx.fillRect(0, -6, 88, 6);
+  ctx.fillStyle = rgba('#f6ffe2', 0.85); ctx.fillRect(0, -3, 88, 2.6);
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = rgba('#a8763f', 0.2); ctx.fillRect(i * 29, -22, 27, 8); }
 }
 function bakeBossPhone(kind) {
   // kind 0: THE ALGORITHM (phone + eye + crown)   kind 1: THE WHALE (chart terminal)
