@@ -66,6 +66,7 @@ var time_scale_target := 1.0
 var shake_amt := 0.0
 var hitstop_until := 0
 var autoplay := false
+var hold_creatures := false   # review harness: freeze the cast for a photo
 var _death_shot := false
 
 const DEATH_LINES := [
@@ -270,6 +271,9 @@ func _process(delta: float) -> void:
 	if state != ST_PLAY or paused:
 		return
 
+	if hold_creatures:
+		# review mode: hold the whole run still so the cast can be photographed
+		run_speed = 0.0
 	dist += run_speed * delta * 0.06
 	run_speed = minf(MAX_SPEED, START_SPEED + dist * 0.045)
 	world.scroll += run_speed * delta
@@ -304,23 +308,28 @@ func _process(delta: float) -> void:
 
 func _spawn_wave() -> void:
 	var roll := randf()
-	var kinds: Array = ["walker", "walker", "flyer"]
-	if dist > 120:
-		kinds.append("shooter")
-	if dist > 220:
-		kinds.append("charger")
-	if dist > 340:
-		kinds.append("splitter")
-	if dist > 460:
-		kinds.append("brute")
-	if dist > 600:
-		kinds.append("drifter")
+	# weighted so the friendly idiots are common and the nasty ones ramp in
+	var kinds: Array = ["shibe", "shibe", "frog", "wojak"]
+	if dist > 110:
+		kinds.append("candle")
+	if dist > 190:
+		kinds.append("rekt")
+	if dist > 280:
+		kinds.append("npc")
+		kinds.append("bonk")
+	if dist > 380:
+		kinds.append("chad")
+		kinds.append("rocket")
+	if dist > 470:
+		kinds.append("rug")
+	if dist > 560:
+		kinds.append("whale")
 	var kind: String = kinds[randi() % kinds.size()]
 	# spawn ahead of the PLAYER, not at a fixed world x: a fixed x means the run
 	# goes quiet forever once you have travelled past it
 	var x := _ahead(1.05)
 	var y := ground_y - 20.0
-	if kind == "flyer" or kind == "drifter":
+	if kind in ["rocket", "npc"]:
 		y = ground_y - randf_range(110.0, 210.0)
 	# small groups once the run is warm
 	var count := 1
@@ -479,13 +488,20 @@ func weapon_label() -> String:
 ## The cast talks. Barks are short, in character, and rationed — a screen full of
 ## speech bubbles is noise, so the speech node caps and cools them down.
 const BARKS := {
-	"walker_spawn": ["hey. hey.", "you look liquid.", "gm.", "touch grass?", "gm ser"],
-	"flyer_spawn": ["i can see ur house", "up here, idiot", "ratio incoming", "look up"],
-	"charger_spawn": ["BEEP", "brace", "i am the news", "coming through"],
-	"shooter_spawn": ["hold still", "pew pew", "cover me", "i have a lens"],
-	"brute_spawn": ["heavy day", "i lift", "no thoughts", "big bag"],
-	"splitter_spawn": ["two for one", "we contain multitudes", "cut me", "i split"],
-	"drifter_spawn": ["just drifting", "no signal", "wheee", "unmuted"],
+	"shibe_spawn": ["much run. very wow.", "such meme", "wow", "am doge", "buy shib"],
+	"frog_spawn": ["feels good man", "rare frog", "gm frogs", "ribbit. acquire currency."],
+	"wojak_spawn": ["i just want to grill", "why is this happening", "am i the npc?",
+		"this is not what i voted for", "i have a family"],
+	"chad_spawn": ["yes.", "skill issue", "i lift, you cope", "that is a you problem"],
+	"candle_spawn": ["green candle. up only.", "i am the chart", "wick it", "doji"],
+	"bonk_spawn": ["BONK", "bonk bonk", "get bonked", "come here"],
+	"whale_spawn": ["i am the exit liquidity", "you are my exit", "buy. i sell.",
+		"i hold 40% of you"],
+	"rocket_spawn": ["to the moon", "up only", "i am the catalyst", "fuel to burn"],
+	"rekt_spawn": ["u good?", "rip bozo", "down 99%", "have you tried holding"],
+	"npc_spawn": ["i am just happy to be here", "nice weather", "what is a wallet",
+		"i bought at the top"],
+	"rug_spawn": ["trust me bro", "this is a safe launch", "liquidity is locked (it is not)"],
 	"hit": ["ow", "rude", "skill issue", "that was unpatched", "not the face", "bruh"],
 	"death": ["gg", "i'm telling", "rekt", "ngmi", "this is fine", "tell my bag"],
 	"boss_eye": ["personalised.", "for you.", "watch this.", "you are the content."],
@@ -524,6 +540,11 @@ func hitstop(seconds: float) -> void:
 
 func _update_camera(delta: float) -> void:
 	if player == null:
+		return
+	if hold_creatures:
+		# review mode: park the camera so world x maps straight to screen x
+		camera.position = Vector2(view.x * 0.5, view.y * 0.5)
+		camera.offset = Vector2.ZERO
 		return
 	var target := Vector2(player.global_position.x + view.x * 0.12, view.y * 0.5)
 	# a little lookahead toward where you are shooting, so the screen leans in
@@ -633,6 +654,8 @@ func _handle_cli() -> void:
 			_capture_run(a.substr(6), 6)
 		elif a.begins_with("--mode="):
 			start_run(a.substr(7))
+		elif a == "--hold":
+			hold_creatures = true
 		elif a == "--die":
 			_death_shot = true
 		elif a == "--boss":
@@ -649,10 +672,10 @@ func _spawn_lineup(list: String) -> void:
 	var kinds: PackedStringArray = list.split(",")
 	var i := 0
 	for k in kinds:
-		var y := ground_y - 26.0
-		if k in ["flyer", "drifter"]:
-			y = ground_y - 150.0
-		spawn_enemy(k, Vector2(520.0 + i * 96.0, y))
+		var y := ground_y - 34.0
+		if k in ["rocket", "npc"]:
+			y = ground_y - 170.0
+		spawn_enemy(k, Vector2(60.0 + i * 90.0, y))
 		i += 1
 
 func _capture_run(dir_path: String, count: int) -> void:
